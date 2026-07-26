@@ -1,4 +1,5 @@
 const profileService = require("../services/profileService");
+const { enqueueProfileScan, getJobStatus } = require("../queues/scanQueue");
 
 exports.getProfilesDashboard = async (req, res, next) => {
   try {
@@ -55,27 +56,52 @@ exports.updateProfile = async (req, res, next) => {
 };
 
 exports.refreshProfile = async (req, res, next) => {
-  console.log("Refreshing profile...");
-
+  console.log("Refres profile for",req.params.id)
   try {
     const userId = req.user.id;
     const profileId = req.params.id;
 
-    const profile = await profileService.refreshProfile({
+    const existing = await profileService.getProfileById({ userId, profileId });
+    if (!existing) {
+      const err = new Error("Profile not found");
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const result = await enqueueProfileScan({
       userId,
       profileId,
+      username: existing.username,
     });
 
-    console.log("Controller received refreshed profile", {
-      profileId: profile?.id,
-    });
+    if (result.alreadyRunning) {
+      return res.status(200).json({
+        message: "Profile refresh already in progress",
+        jobId: result.id,
+        profileId,
+        status: result.status,
+        alreadyRunning: true,
+      });
+    }
 
-    return res.status(200).json({
-      message: "Profile refreshed successfully",
-      profile,
+    return res.status(202).json({
+      message: "Profile refresh started",
+      jobId: result.id,
+      profileId,
+      status: result.status,
+      alreadyRunning: false,
     });
   } catch (error) {
-    console.error("Controller refresh error:", error);
+    next(error);
+  }
+};
+
+exports.getRefreshStatus = async (req, res, next) => {
+  try {
+    const { jobId } = req.params;
+    const status = await getJobStatus(jobId);
+    return res.status(200).json(status);
+  } catch (error) {
     next(error);
   }
 };

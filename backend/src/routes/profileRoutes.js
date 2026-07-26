@@ -10,5 +10,6 @@ router.get("/", profileController.getProfilesDashboard);
 router.post("/", profileController.createProfile);
 router.patch("/:id", profileController.updateProfile);
 router.post("/:id/refresh", profileController.refreshProfile);
+router.get("/:id/refresh-status/:jobId", profileController.getRefreshStatus);
 
 module.exports = router;

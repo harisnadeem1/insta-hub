@@ -214,19 +214,42 @@ async function settleInstagramPage(page) {
   }
 }
 
-function mergeShortcodes(...lists) {
-  const seen = new Set();
-  const merged = [];
+function mergeShortcodes(mainGridList = [], reelsList = []) {
+  const byShortcode = new Map();
 
-  for (const list of lists) {
-    for (const item of list || []) {
-      if (!item?.shortcode || seen.has(item.shortcode)) continue;
-      seen.add(item.shortcode);
-      merged.push(item);
-    }
+  for (const item of mainGridList) {
+    if (!item?.shortcode) continue;
+
+    const existing = byShortcode.get(item.shortcode) || {
+      shortcode: item.shortcode,
+      type: item.type || "post",
+      seenInMainGrid: false,
+      seenInReelsTab: false,
+    };
+
+    existing.type = item.type || existing.type;
+    existing.seenInMainGrid = true;
+
+    byShortcode.set(item.shortcode, existing);
   }
 
-  return merged;
+  for (const item of reelsList) {
+    if (!item?.shortcode) continue;
+
+    const existing = byShortcode.get(item.shortcode) || {
+      shortcode: item.shortcode,
+      type: item.type || "reel",
+      seenInMainGrid: false,
+      seenInReelsTab: false,
+    };
+
+    existing.type = item.type || existing.type;
+    existing.seenInReelsTab = true;
+
+    byShortcode.set(item.shortcode, existing);
+  }
+
+  return Array.from(byShortcode.values());
 }
 
 async function extractReelStatsFromPage(page) {
@@ -292,12 +315,20 @@ async function extractReelStatsFromPage(page) {
         comments_count = numbers[0];
       }
 
-      results.push({
-        shortcode,
-        type: "reel",
-        views_count,
-        comments_count,
-      });
+     results.push({
+  shortcode,
+  type: "reel",
+  views_count,
+  comments_count,
+  debug: {
+    href,
+    rawViewText: viewIcon
+      ? getNumericText(viewIcon.closest("div")?.parentElement || viewIcon.closest("div"))
+      : "",
+    rawListTexts: listItems.map((li) => (li.textContent || "").trim()),
+    parsedNumbers: numbers,
+  },
+});
     }
 
     return results;
@@ -386,6 +417,130 @@ async function extractMainGridStatsFromPage(page, username) {
   }, cleanUsername);
 }
 
+// async function collectReelsTabShortcodesByScrolling(page, targetCount = Infinity, maxScrollRounds = 40) {
+//   const seen = new Map();
+//   let stalledRounds = 0;
+//   let previousCount = 0;
+
+//   for (let round = 0; round < maxScrollRounds; round += 1) {
+//     const html = await page.content();
+//     const items = getShortcodesFromHtml(html, Infinity)
+//       .filter((item) => item?.shortcode && item.type === "reel");
+
+//     for (const item of items) {
+//       if (!seen.has(item.shortcode)) {
+//         seen.set(item.shortcode, {
+//           shortcode: item.shortcode,
+//           type: "reel",
+//         });
+//       }
+//     }
+
+//     const currentCount = seen.size;
+
+//     if (currentCount >= targetCount) break;
+
+//     if (currentCount === previousCount) {
+//       stalledRounds += 1;
+//     } else {
+//       stalledRounds = 0;
+//       previousCount = currentCount;
+//     }
+
+//     if (stalledRounds >= 4) break;
+
+//     await page.mouse.move(300, 700);
+//     await page.mouse.wheel(0, 1800);
+//     await page.waitForTimeout(1200);
+
+//     await page.evaluate(() => {
+//       window.scrollBy(0, window.innerHeight * 1.5);
+//     }).catch(() => {});
+
+//     await page.waitForTimeout(1200);
+//   }
+
+//   return Array.from(seen.values());
+// }
+
+
+function mergeReelStats(existingMap, items = []) {
+  for (const item of items) {
+    if (!item?.shortcode) continue;
+
+    const prev = existingMap.get(item.shortcode) || {
+      shortcode: item.shortcode,
+      type: "reel",
+      views_count: 0,
+      comments_count: 0,
+      debug: null,
+    };
+
+    existingMap.set(item.shortcode, {
+      ...prev,
+      ...item,
+      views_count: Math.max(Number(prev.views_count || 0), Number(item.views_count || 0)),
+      comments_count: Math.max(Number(prev.comments_count || 0), Number(item.comments_count || 0)),
+      debug: item.debug || prev.debug,
+    });
+  }
+
+  return existingMap;
+}
+
+async function collectReelsTabDataByScrolling(page, targetCount = Infinity, maxScrollRounds = 40) {
+  const shortcodesMap = new Map();
+  const statsMap = new Map();
+  let stalledRounds = 0;
+  let previousCount = 0;
+
+  for (let round = 0; round < maxScrollRounds; round += 1) {
+    const html = await page.content();
+    const items = getShortcodesFromHtml(html, Infinity)
+      .filter((item) => item?.shortcode && item.type === "reel");
+
+    for (const item of items) {
+      if (!shortcodesMap.has(item.shortcode)) {
+        shortcodesMap.set(item.shortcode, {
+          shortcode: item.shortcode,
+          type: "reel",
+        });
+      }
+    }
+
+    const visibleStats = await extractReelStatsFromPage(page);
+    mergeReelStats(statsMap, visibleStats);
+
+    const currentCount = shortcodesMap.size;
+
+    if (currentCount >= targetCount) break;
+
+    if (currentCount === previousCount) {
+      stalledRounds += 1;
+    } else {
+      stalledRounds = 0;
+      previousCount = currentCount;
+    }
+
+    if (stalledRounds >= 4) break;
+
+    await page.mouse.move(300, 700);
+    await page.mouse.wheel(0, 1800);
+    await page.waitForTimeout(1200);
+
+    await page.evaluate(() => {
+      window.scrollBy(0, window.innerHeight * 1.5);
+    }).catch(() => {});
+
+    await page.waitForTimeout(1200);
+  }
+
+  return {
+    shortcodes: Array.from(shortcodesMap.values()),
+    reelStats: Array.from(statsMap.values()),
+  };
+}
+
 async function tryOpenReelsTab(page, username) {
   const cleanUsername = normalizeUsername(username);
   const reelsUrl = `https://www.instagram.com/${cleanUsername}/reels/`;
@@ -394,25 +549,18 @@ async function tryOpenReelsTab(page, username) {
     await page.goto(reelsUrl, { waitUntil: "domcontentloaded", timeout: 45000 });
     await settleInstagramPage(page);
 
-await page.mouse.move(300, 400);
-await page.mouse.wheel(0, 1200);
-await page.waitForTimeout(1000);
-await page.mouse.wheel(0, 1200);
-await page.waitForTimeout(1000);
-
+const collected = await collectReelsTabDataByScrolling(page, Infinity, 50);
 const html = await page.content();
-const shortcodes = getShortcodesFromHtml(html);
-const reelStats = await extractReelStatsFromPage(page);
 
-    return {
-      url: reelsUrl,
-      html,
-      shortcodes: shortcodes.map((item) => ({
-        shortcode: item.shortcode,
-        type: "reel",
-      })),
-      reelStats,
-    };
+return {
+  url: reelsUrl,
+  html,
+  shortcodes: collected.shortcodes.map((item) => ({
+    shortcode: item.shortcode,
+    type: "reel",
+  })),
+  reelStats: collected.reelStats,
+};
   } catch (error) {
     console.log("failed to open reels tab directly", {
       username: cleanUsername,
@@ -426,19 +574,18 @@ const reelStats = await extractReelStatsFromPage(page);
       await reelsLink.first().click({ force: true }).catch(() => {});
       await settleInstagramPage(page);
 
-      const html = await page.content();
-      const shortcodes = getShortcodesFromHtml(html);
-      const reelStats = await extractReelStatsFromPage(page);
+      const collected = await collectReelsTabDataByScrolling(page, Infinity, 50);
+const html = await page.content();
 
-      return {
-        url: page.url(),
-        html,
-        shortcodes: shortcodes.map((item) => ({
-          shortcode: item.shortcode,
-          type: "reel",
-        })),
-        reelStats,
-      };
+return {
+  url: page.url(),
+  html,
+  shortcodes: collected.shortcodes.map((item) => ({
+    shortcode: item.shortcode,
+    type: "reel",
+  })),
+  reelStats: collected.reelStats,
+};
     }
   } catch (error) {
     console.log("failed to open reels tab by clicking", {
@@ -527,6 +674,97 @@ async function fetchSinglePostStats(context, debugDir, shortcode, type = "post")
   }
 }
 
+async function extractProfilePostCountFromPage(page) {
+  return await page.evaluate(() => {
+    function parseCompactNumber(value) {
+      if (value == null) return 0;
+      const raw = String(value).trim().replace(/,/g, "");
+      const match = raw.match(/^([\d.]+)\s*([kmb])?$/i);
+      if (!match) {
+        const digits = raw.replace(/[^\d]/g, "");
+        return digits ? Number(digits) : 0;
+      }
+      const num = Number(match[1] || 0);
+      const suffix = (match[2] || "").toLowerCase();
+      if (suffix === "k") return Math.round(num * 1000);
+      if (suffix === "m") return Math.round(num * 1000000);
+      if (suffix === "b") return Math.round(num * 1000000000);
+      return Math.round(num);
+    }
+
+    const candidates = [];
+
+    const headerLis = Array.from(document.querySelectorAll("header li, section main header li"));
+    for (const li of headerLis) {
+      const text = (li.textContent || "").trim();
+      if (/posts?/i.test(text)) {
+        const match = text.match(/([\d.,]+(?:\s*[KMB])?)/i);
+        if (match) candidates.push(parseCompactNumber(match[1]));
+      }
+    }
+
+    const pageText = document.body?.innerText || "";
+    const textMatch = pageText.match(/([\d.,]+(?:\s*[KMB])?)\s+posts?/i);
+    if (textMatch) candidates.push(parseCompactNumber(textMatch[1]));
+
+    return candidates.find((n) => n > 0) || 0;
+  });
+}
+
+async function collectMainGridShortcodesByScrolling(page, username, targetCount = Infinity, maxScrollRounds = 60) {
+  const cleanUsername = String(username || "").toLowerCase();
+  const seen = new Map();
+  let stalledRounds = 0;
+  let previousCount = 0;
+
+  for (let round = 0; round < maxScrollRounds; round += 1) {
+    const html = await page.content();
+    const items = getShortcodesFromHtml(html, Infinity);
+
+    for (const item of items) {
+      if (!item?.shortcode) continue;
+      if (!seen.has(item.shortcode)) {
+        seen.set(item.shortcode, item);
+      }
+    }
+
+    const currentCount = seen.size;
+
+    if (currentCount >= targetCount) {
+      break;
+    }
+
+    if (currentCount === previousCount) {
+      stalledRounds += 1;
+    } else {
+      stalledRounds = 0;
+      previousCount = currentCount;
+    }
+
+    if (stalledRounds >= 4) {
+      break;
+    }
+
+    await page.mouse.move(300, 700);
+    await page.mouse.wheel(0, 1800);
+    await page.waitForTimeout(1200);
+
+    await page.evaluate(() => {
+      window.scrollBy(0, window.innerHeight * 1.5);
+    }).catch(() => {});
+
+    await page.waitForTimeout(1200);
+  }
+
+  return Array.from(seen.values()).filter((item) => {
+    const shortcode = item.shortcode;
+    const type = item.type || "post";
+    if (!shortcode) return false;
+    if (type === "post") return true;
+    return true;
+  });
+}
+
 async function fetchProfilePageWithBrowser(username, options = {}) {
   const cleanUsername = normalizeUsername(username);
   if (!cleanUsername) throw createError("Username is required", 400);
@@ -584,18 +822,42 @@ async function fetchProfilePageWithBrowser(username, options = {}) {
       );
     }
 
-    const html = await page.content();
-    const mainGridShortcodes = getShortcodesFromHtml(
-      html,
-      Number.isFinite(postLimit) ? postLimit : Infinity
-    );
-    const mainGridStats = await extractMainGridStatsFromPage(page, cleanUsername);
+    const initialHtml = await page.content();
+const reportedPostCount = await extractProfilePostCountFromPage(page);
+
+const targetMainGridCount = Number.isFinite(postLimit)
+  ? Math.min(postLimit, reportedPostCount || postLimit)
+  : reportedPostCount || Infinity;
+
+const mainGridShortcodes = await collectMainGridShortcodesByScrolling(
+  page,
+  cleanUsername,
+  targetMainGridCount,
+  80
+);
+
+const html = await page.content();
+const mainGridStats = await extractMainGridStatsFromPage(page, cleanUsername);
 
     const reelsTab = await tryOpenReelsTab(page, cleanUsername);
     const reelsShortcodes = reelsTab.shortcodes || [];
     const reelStats = reelsTab.reelStats || [];
 
+    for (const item of reelStats) {
+  console.log("[reel-stats]", {
+    shortcode: item.shortcode,
+    views_count: item.views_count,
+    comments_count: item.comments_count,
+    rawViewText: item.debug?.rawViewText || "",
+    rawListTexts: item.debug?.rawListTexts || [],
+    parsedNumbers: item.debug?.parsedNumbers || [],
+  });
+}
+
     const shortcodes = mergeShortcodes(mainGridShortcodes, reelsShortcodes);
+    const overlapCount = shortcodes.filter(
+  (item) => item.seenInMainGrid && item.seenInReelsTab
+).length;
 
     const mainGridStatsMap = new Map(
       mainGridStats.map((item) => [item.shortcode, Number(item.comments_count || 0)])
@@ -612,11 +874,13 @@ async function fetchProfilePageWithBrowser(username, options = {}) {
     );
 
     console.log("shortcode collection summary", {
-      mainGridCount: mainGridShortcodes.length,
-      reelsTabCount: reelsShortcodes.length,
-      mergedCount: shortcodes.length,
-      reelsTabUrl: reelsTab.url,
-    });
+  reportedPostCount,
+  mainGridCount: mainGridShortcodes.length,
+  reelsTabCount: reelsShortcodes.length,
+  mergedCount: shortcodes.length,
+  overlapCount,
+  reelsTabUrl: reelsTab.url,
+});
 
     let totalComments = 0;
     let totalViews = 0;
@@ -629,17 +893,35 @@ async function fetchProfilePageWithBrowser(username, options = {}) {
   return gridComments <= 0;
 });
 
-   for (const item of shortcodes) {
+ for (const item of shortcodes) {
   if (reelStatsMap.has(item.shortcode)) {
     const stats = reelStatsMap.get(item.shortcode) || {
       comments_count: 0,
       views_count: 0,
     };
+
+    console.log("[aggregate:reel]", {
+      shortcode: item.shortcode,
+      seenInMainGrid: item.seenInMainGrid,
+      seenInReelsTab: item.seenInReelsTab,
+      comments_count: stats.comments_count,
+      views_count: stats.views_count,
+    });
+
     totalComments += stats.comments_count;
     totalViews += stats.views_count;
     postSuccessCount += 1;
   } else {
     const gridComments = mainGridStatsMap.get(item.shortcode) || 0;
+
+    console.log("[aggregate:grid-only]", {
+      shortcode: item.shortcode,
+      seenInMainGrid: item.seenInMainGrid,
+      seenInReelsTab: item.seenInReelsTab,
+      comments_count: gridComments,
+      views_count: 0,
+    });
+
     totalComments += gridComments;
     postSuccessCount += 1;
   }
@@ -666,10 +948,13 @@ async function fetchProfilePageWithBrowser(username, options = {}) {
           continue;
         }
 
-        const alreadyCounted = mainGridStatsMap.get(result.shortcode) || 0;
-        if (result.comments_count > alreadyCounted) {
-          totalComments += result.comments_count - alreadyCounted;
-        }
+        const gridComments = mainGridStatsMap.get(result.shortcode) || 0;
+const reelComments = reelStatsMap.get(result.shortcode)?.comments_count || 0;
+const alreadyCounted = Math.max(gridComments, reelComments);
+
+if (result.comments_count > alreadyCounted) {
+  totalComments += result.comments_count - alreadyCounted;
+}
       }
 
       await page.waitForTimeout(1200);
@@ -715,15 +1000,20 @@ async function fetchProfilePageWithBrowser(username, options = {}) {
       html,
       responses: collectedResponses,
       shortcodes,
-      comments_count: totalComments,
-      visible_views_count: totalViews,
+      comments_count: Number(totalComments || 0),
+      visible_views_count: Number(totalViews || 0),
       post_stats_meta: {
-        postSuccessCount,
-        processedPostCount: shortcodes.length,
-        mainGridCount: mainGridShortcodes.length,
-        reelsTabCount: reelsShortcodes.length,
-        fallbackCount: fallbackCandidates.length,
-      },
+  reportedPostCount,
+  postSuccessCount,
+  processedPostCount: shortcodes.length,
+  mainGridCount: mainGridShortcodes.length,
+  reelsTabCount: reelsShortcodes.length,
+  overlapCount,
+  fallbackCount: fallbackCandidates.length,
+  mainGridCoverageRatio: reportedPostCount > 0
+    ? Number((mainGridShortcodes.length / reportedPostCount).toFixed(4))
+    : null,
+},
     };
   } catch (error) {
     throw createError(`Browser scrape failed: ${error.message}`, error.statusCode || 500);

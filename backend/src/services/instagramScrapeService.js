@@ -427,13 +427,20 @@ if (METHOD_ENABLED.browser_scraper) {
 );
 
     console.log("11. browser scraper returned", {
-      htmlLength: browserPage?.html?.length || 0,
-      responsesCount: browserPage?.responses?.length || 0,
-     processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
-      postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
-      comments_count: browserPage?.comments_count || 0,
-      visible_views_count: browserPage?.visible_views_count || 0,
-    });
+  htmlLength: browserPage?.html?.length || 0,
+  responsesCount: browserPage?.responses?.length || 0,
+  reportedPostCount: browserPage?.post_stats_meta?.reportedPostCount || 0,
+  mainGridCount: browserPage?.post_stats_meta?.mainGridCount || 0,
+  reelsTabCount: browserPage?.post_stats_meta?.reelsTabCount || 0,
+  processedPostCount:
+    browserPage?.post_stats_meta?.processedPostCount ||
+    browserPage?.post_stats_meta?.sampledPostCount ||
+    0,
+  postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+  mainGridCoverageRatio: browserPage?.post_stats_meta?.mainGridCoverageRatio ?? null,
+  comments_count: browserPage?.comments_count || 0,
+  visible_views_count: browserPage?.visible_views_count || 0,
+});
 
     const networkProfile = findProfileInNetworkResponses(
       browserPage.responses,
@@ -480,12 +487,19 @@ if (METHOD_ENABLED.browser_scraper) {
       normalizedNetwork.raw_payload = {
         ...normalizedNetwork.raw_payload,
         browser_post_stats: {
-          processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
-          postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
-          comments_count: browserPage?.comments_count || 0,
-          visible_views_count: browserPage?.visible_views_count || 0,
-          shortcodes: browserPage?.shortcodes || [],
-        },
+  reportedPostCount: browserPage?.post_stats_meta?.reportedPostCount || 0,
+  mainGridCount: browserPage?.post_stats_meta?.mainGridCount || 0,
+  reelsTabCount: browserPage?.post_stats_meta?.reelsTabCount || 0,
+  processedPostCount:
+    browserPage?.post_stats_meta?.processedPostCount ||
+    browserPage?.post_stats_meta?.sampledPostCount ||
+    0,
+  postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+  mainGridCoverageRatio: browserPage?.post_stats_meta?.mainGridCoverageRatio ?? null,
+  comments_count: browserPage?.comments_count || 0,
+  visible_views_count: browserPage?.visible_views_count || 0,
+  shortcodes: browserPage?.shortcodes || [],
+},
       };
 
       return normalizedNetwork;
@@ -510,12 +524,19 @@ if (METHOD_ENABLED.browser_scraper) {
     normalized.raw_payload = {
       ...normalized.raw_payload,
       browser_post_stats: {
-        processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
-        postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
-        comments_count: browserPage?.comments_count || 0,
-        visible_views_count: browserPage?.visible_views_count || 0,
-        shortcodes: browserPage?.shortcodes || [],
-      },
+  reportedPostCount: browserPage?.post_stats_meta?.reportedPostCount || 0,
+  mainGridCount: browserPage?.post_stats_meta?.mainGridCount || 0,
+  reelsTabCount: browserPage?.post_stats_meta?.reelsTabCount || 0,
+  processedPostCount:
+    browserPage?.post_stats_meta?.processedPostCount ||
+    browserPage?.post_stats_meta?.sampledPostCount ||
+    0,
+  postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+  mainGridCoverageRatio: browserPage?.post_stats_meta?.mainGridCoverageRatio ?? null,
+  comments_count: browserPage?.comments_count || 0,
+  visible_views_count: browserPage?.visible_views_count || 0,
+  shortcodes: browserPage?.shortcodes || [],
+},
     };
 
     if (hasMeaningfulCounts(normalized)) {

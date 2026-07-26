@@ -442,3 +442,12 @@ exports.refreshProfile = async ({ userId, profileId }) => {
     console.log("12. db client released");
   }
 };
+
+exports.getProfileById = async ({ userId, profileId }) => {
+  try {
+    return await getOwnedProfile(userId, profileId);
+  } catch (error) {
+    if (error.statusCode === 404) return null;
+    throw error;
+  }
+};

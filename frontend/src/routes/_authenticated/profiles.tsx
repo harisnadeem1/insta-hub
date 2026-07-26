@@ -568,6 +568,52 @@ function MiniStat({ label, value }: { label: string; value: number }) {
   );
 }
 
+async function pollRefreshStatus(
+  profileId: number,
+  jobId: string,
+  onChanged: () => Promise<void>,
+  attempt = 0,
+) {
+  const token = getToken();
+  const maxAttempts = 60; // ~5 min at 5s intervals
+  const intervalMs = 5000;
+
+  if (attempt >= maxAttempts) {
+    toast.error("Refresh is taking longer than expected — check back later");
+    return;
+  }
+
+  try {
+    const response = await fetch(
+      `${API_BASE_URL}/profiles/${profileId}/refresh-status/${jobId}`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+
+    if (!response.ok) {
+      toast.error("Could not check refresh status");
+      return;
+    }
+
+    const data = await response.json();
+
+    if (data.status === "completed") {
+      toast.success("Profile stats refreshed");
+      await onChanged();
+      return;
+    }
+
+    if (data.status === "failed") {
+      toast.error(data.failedReason || "Refresh failed");
+      return;
+    }
+
+    setTimeout(() => pollRefreshStatus(profileId, jobId, onChanged, attempt + 1), intervalMs);
+  } catch (error) {
+    console.error("Poll refresh status failed:", error);
+    setTimeout(() => pollRefreshStatus(profileId, jobId, onChanged, attempt + 1), intervalMs);
+  }
+}
+
 function RowMenu({ profile, onChanged }: { profile: ProfileItem; onChanged: () => Promise<void> }) {
   const handleRefresh = async () => {
     const token = getToken();
@@ -580,14 +626,21 @@ function RowMenu({ profile, onChanged }: { profile: ProfileItem; onChanged: () =
         },
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        toast.error(errorData?.message || "Failed to refresh stats");
+        toast.error(data?.message || "Failed to start refresh");
         return;
       }
 
-      toast.success("Profile stats refreshed");
-      await onChanged();
+      if (data?.alreadyRunning) {
+        toast.info("Already working on this profile");
+        pollRefreshStatus(profile.id, data.jobId, onChanged);
+        return;
+      }
+
+      toast.info("Refresh started");
+      pollRefreshStatus(profile.id, data.jobId, onChanged);
     } catch (error) {
       console.error("Refresh request failed:", error);
       toast.error("Could not reach the server");
