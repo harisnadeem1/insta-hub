@@ -209,15 +209,30 @@ export function formatCompact(n: number): string {
 
 export function formatRelative(iso: string | null): string {
   if (!iso) return "never";
-  const then = new Date(iso).getTime();
-  const now = new Date("2025-07-25T07:00:00Z").getTime();
-  const diff = Math.max(0, now - then);
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  const days = Math.floor(hrs / 24);
-  return `${days}d ago`;
+
+  const normalized = iso.replace(" ", "T");
+  const then = new Date(normalized);
+
+  if (Number.isNaN(then.getTime())) return "invalid date";
+
+  const diffMs = then.getTime() - Date.now();
+  const diffSec = Math.round(diffMs / 1000);
+  const absSec = Math.abs(diffSec);
+
+  const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+  if (absSec < 60) return rtf.format(diffSec, "second");
+
+  const diffMin = Math.round(diffSec / 60);
+  if (Math.abs(diffMin) < 60) return rtf.format(diffMin, "minute");
+
+  const diffHour = Math.round(diffMin / 60);
+  if (Math.abs(diffHour) < 24) return rtf.format(diffHour, "hour");
+
+  const diffDay = Math.round(diffHour / 24);
+  if (Math.abs(diffDay) < 7) return rtf.format(diffDay, "day");
+
+  return then.toLocaleString();
 }
 
 export function getMemberProfiles(memberId: string) {

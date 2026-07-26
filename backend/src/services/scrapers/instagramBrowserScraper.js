@@ -337,84 +337,114 @@ async function extractReelStatsFromPage(page) {
 
 async function extractMainGridStatsFromPage(page, username) {
   const cleanUsername = String(username || "").toLowerCase();
+  const links = page.locator('a[href*="/p/"], a[href*="/reel/"]');
+  const count = await links.count();
+  const results = [];
+  const seen = new Set();
 
-  return await page.evaluate(async (expectedUsername) => {
-    function parseCompactNumber(value) {
-      if (value == null) return 0;
-      const raw = String(value).trim().replace(/,/g, "");
-      const match = raw.match(/^([\d.]+)\s*([kmb])?$/i);
-      if (!match) {
-        const digits = raw.replace(/[^\d]/g, "");
-        return digits ? Number(digits) : 0;
+  function parseCompactNumber(value) {
+    if (value == null) return 0;
+    const raw = String(value).trim().replace(/,/g, "");
+    const match = raw.match(/^([\d.]+)\s*([kmb])?$/i);
+    if (!match) {
+      const digits = raw.replace(/[^\d]/g, "");
+      return digits ? Number(digits) : 0;
+    }
+    const num = Number(match[1] || 0);
+    const suffix = (match[2] || "").toLowerCase();
+    if (suffix === "k") return Math.round(num * 1000);
+    if (suffix === "m") return Math.round(num * 1000000);
+    if (suffix === "b") return Math.round(num * 1000000000);
+    return Math.round(num);
+  }
+
+  for (let i = 0; i < count; i += 1) {
+    const link = links.nth(i);
+    const href = await link.getAttribute("href").catch(() => null);
+    if (!href) continue;
+
+    const match =
+      href.match(new RegExp(`/${cleanUsername}/p/([A-Za-z0-9_-]{5,})/?`, "i")) ||
+      href.match(new RegExp(`/${cleanUsername}/reel/([A-Za-z0-9_-]{5,})/?`, "i")) ||
+      href.match(/\/p\/([A-Za-z0-9_-]{5,})\/?/i) ||
+      href.match(/\/reel\/([A-Za-z0-9_-]{5,})\/?/i);
+
+    if (!match) continue;
+
+    const shortcode = match[1];
+    const type = href.includes("/reel/") ? "reel" : "post";
+    if (seen.has(shortcode)) continue;
+    seen.add(shortcode);
+
+    await link.hover({ force: true }).catch(() => {});
+    await page.waitForTimeout(350);
+
+    const stats = await link.evaluate((el) => {
+      function parseCompactNumber(value) {
+        if (value == null) return 0;
+        const raw = String(value).trim().replace(/,/g, "");
+        const match = raw.match(/^([\d.]+)\s*([kmb])?$/i);
+        if (!match) {
+          const digits = raw.replace(/[^\d]/g, "");
+          return digits ? Number(digits) : 0;
+        }
+        const num = Number(match[1] || 0);
+        const suffix = (match[2] || "").toLowerCase();
+        if (suffix === "k") return Math.round(num * 1000);
+        if (suffix === "m") return Math.round(num * 1000000);
+        if (suffix === "b") return Math.round(num * 1000000000);
+        return Math.round(num);
       }
-      const num = Number(match[1] || 0);
-      const suffix = (match[2] || "").toLowerCase();
-      if (suffix === "k") return Math.round(num * 1000);
-      if (suffix === "m") return Math.round(num * 1000000);
-      if (suffix === "b") return Math.round(num * 1000000000);
-      return Math.round(num);
-    }
 
-    function sleep(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
+      function getNumericText(node) {
+        if (!node) return "";
+        const spans = Array.from(node.querySelectorAll("span"));
+        for (const span of spans) {
+          const text = (span.textContent || "").trim();
+          if (/^[\d.,]+(?:\s*[KMB])?$/i.test(text)) return text;
+        }
+        const text = (node.textContent || "").trim();
+        const match = text.match(/[\d.,]+(?:\s*[KMB])?/i);
+        return match ? match[0] : "";
+      }
 
-    function getOverlayCommentCount(anchor) {
-      const listItems = Array.from(anchor.querySelectorAll("ul li"));
+      const card =
+        el.closest('article') ||
+        el.parentElement ||
+        el;
+
+      const listItems = Array.from(card.querySelectorAll("ul li"));
       const numbers = listItems
-        .map((li) => {
-          const spans = Array.from(li.querySelectorAll("span"));
-          for (const span of spans) {
-            const text = (span.textContent || "").trim();
-            if (/^[\d.,]+(?:\s*[KMB])?$/i.test(text)) {
-              return parseCompactNumber(text);
-            }
-          }
-          const text = (li.textContent || "").trim();
-          const match = text.match(/[\d.,]+(?:\s*[KMB])?/i);
-          return match ? parseCompactNumber(match[0]) : null;
-        })
-        .filter((v) => v != null);
+        .map((li) => parseCompactNumber(getNumericText(li)))
+        .filter((n) => Number.isFinite(n));
 
-      if (numbers.length >= 2) return numbers[1];
-      if (numbers.length === 1) return numbers[0];
-      return 0;
-    }
+      return {
+        comments_count: numbers.length >= 2 ? numbers[1] : numbers.length === 1 ? numbers[0] : 0,
+        debugTexts: listItems.map((li) => (li.textContent || "").trim()),
+        parsedNumbers: numbers,
+      };
+    }).catch(() => ({
+      comments_count: 0,
+      debugTexts: [],
+      parsedNumbers: [],
+    }));
 
-    const anchors = Array.from(document.querySelectorAll('a[href*="/p/"], a[href*="/reel/"]'));
-    const results = [];
-    const seen = new Set();
+    console.log("[main-grid-stats]", {
+      shortcode,
+      type,
+      comments_count: stats.comments_count,
+      debugTexts: stats.debugTexts,
+      parsedNumbers: stats.parsedNumbers,
+    });
 
-    for (const a of anchors) {
-      const href = a.getAttribute("href") || "";
-      const match =
-        href.match(new RegExp(`/${expectedUsername}/p/([A-Za-z0-9_-]{5,})/?`, "i")) ||
-        href.match(new RegExp(`/${expectedUsername}/reel/([A-Za-z0-9_-]{5,})/?`, "i")) ||
-        href.match(/\/p\/([A-Za-z0-9_-]{5,})\/?/i) ||
-        href.match(/\/reel\/([A-Za-z0-9_-]{5,})\/?/i);
+    results.push({
+      shortcode,
+      type,
+      comments_count: Number(stats.comments_count || 0),
+    });
+  }
 
-      if (!match) continue;
-
-      const shortcode = match[1];
-      const type = href.includes("/reel/") ? "reel" : "post";
-      if (seen.has(shortcode)) continue;
-      seen.add(shortcode);
-
-      a.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
-      a.dispatchEvent(new MouseEvent("mouseenter", { bubbles: true }));
-      await sleep(120);
-
-      const comments_count = getOverlayCommentCount(a);
-
-      results.push({
-        shortcode,
-        type,
-        comments_count,
-      });
-    }
-
-    return results;
-  }, cleanUsername);
+  return results;
 }
 
 // async function collectReelsTabShortcodesByScrolling(page, targetCount = Infinity, maxScrollRounds = 40) {
