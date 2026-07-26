@@ -1,5 +1,5 @@
-import { Link, useRouterState } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
+import { useMemo, useState, type ReactNode } from "react";
 import {
   LayoutDashboard,
   Users,
@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { currentUser } from "@/lib/mock-data";
+import { getUser, clearAuth } from "@/lib/auth-storage";
 
 type NavItem = {
   to: "/" | "/members" | "/profiles" | "/snapshots" | "/settings";
@@ -34,6 +34,7 @@ type NavItem = {
   icon: typeof LayoutDashboard;
   exact?: boolean;
 };
+
 const navItems: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/members", label: "Members", icon: Users },
@@ -44,11 +45,13 @@ const navItems: NavItem[] = [
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+
   return (
     <nav className="flex flex-col gap-0.5 px-2">
       {navItems.map((item) => {
         const active = item.exact ? pathname === item.to : pathname.startsWith(item.to);
         const Icon = item.icon;
+
         return (
           <Link
             key={item.to}
@@ -61,7 +64,11 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             }`}
           >
             <Icon
-              className={`h-4 w-4 shrink-0 ${active ? "text-primary" : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80"}`}
+              className={`h-4 w-4 shrink-0 ${
+                active
+                  ? "text-primary"
+                  : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80"
+              }`}
             />
             <span className="truncate">{item.label}</span>
           </Link>
@@ -74,15 +81,17 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
 function Sidebar({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <aside className="flex h-full w-full flex-col border-r border-sidebar-border bg-sidebar">
-      <div className="flex h-14 items-center px-4 border-b border-sidebar-border">
+      <div className="flex h-14 items-center border-b border-sidebar-border px-4">
         <Logo />
       </div>
+
       <div className="flex-1 overflow-y-auto py-4">
         <div className="px-4 pb-2 text-[11px] font-medium uppercase tracking-wider text-sidebar-foreground/40">
           Workspace
         </div>
         <NavList onNavigate={onNavigate} />
       </div>
+
       <div className="border-t border-sidebar-border p-3">
         <div className="rounded-md bg-sidebar-accent/40 p-3 text-xs text-sidebar-foreground/70">
           <div className="font-medium text-sidebar-foreground">Public metrics only</div>
@@ -106,18 +115,37 @@ export function AppShell({
   actions?: ReactNode;
   children: ReactNode;
 }) {
+  const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const user = useMemo(() => getUser(), []);
+  const email = user?.email || "";
+
+  const fallbackName = email ? email.split("@")[0] : "User";
+  const fullName = user?.full_name?.trim() ? user.full_name : fallbackName;
+
+  const initials = fullName
+    .split(" ")
+    .filter(Boolean)
+    .map((p) => p[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+
+  const handleLogout = () => {
+    clearAuth();
+    toast.success("Signed out successfully");
+    navigate({ to: "/auth" });
+  };
 
   return (
     <div className="flex min-h-screen bg-background text-foreground">
-      {/* Desktop sidebar */}
-      <div className="hidden md:block md:w-60 lg:w-64 shrink-0">
+      <div className="hidden shrink-0 md:block md:w-60 lg:w-64">
         <div className="fixed inset-y-0 left-0 w-60 lg:w-64">
           <Sidebar />
         </div>
       </div>
 
-      {/* Mobile drawer */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
           <div
@@ -131,7 +159,6 @@ export function AppShell({
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Topbar */}
         <header className="sticky top-0 z-30 flex h-14 items-center gap-2 border-b border-border bg-background/80 px-4 backdrop-blur-md sm:px-6">
           <Button
             variant="ghost"
@@ -164,7 +191,9 @@ export function AppShell({
             variant="outline"
             size="sm"
             className="h-8 gap-1.5"
-            onClick={() => toast.success("Sync started", { description: "Refreshing latest stats…" })}
+            onClick={() =>
+              toast.success("Sync started", { description: "Refreshing latest stats…" })
+            }
           >
             <RefreshCw className="h-3.5 w-3.5" />
             <span className="hidden sm:inline">Sync</span>
@@ -174,36 +203,37 @@ export function AppShell({
             <DropdownMenuTrigger asChild>
               <button className="flex h-8 items-center gap-2 rounded-md border border-border bg-card px-2 text-xs transition-colors hover:bg-accent">
                 <div className="grid h-6 w-6 place-items-center rounded-full bg-primary/20 text-[10px] font-semibold text-primary">
-                  {currentUser.full_name
-                    .split(" ")
-                    .map((p) => p[0])
-                    .join("")}
+                  {initials}
                 </div>
-                <span className="hidden max-w-[120px] truncate sm:inline">{currentUser.full_name}</span>
+                <span className="hidden max-w-[120px] truncate sm:inline">{fullName}</span>
                 <ChevronDown className="h-3 w-3 text-muted-foreground" />
               </button>
             </DropdownMenuTrigger>
+
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel className="text-xs">
-                <div className="font-medium">{currentUser.full_name}</div>
-                <div className="text-muted-foreground">{currentUser.email}</div>
+                <div className="font-medium">{fullName}</div>
+                <div className="text-muted-foreground">{email}</div>
               </DropdownMenuLabel>
+
               <DropdownMenuSeparator />
+
               <DropdownMenuItem asChild>
                 <Link to="/settings" className="cursor-pointer">
                   <User className="mr-2 h-3.5 w-3.5" /> Account
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/auth" className="cursor-pointer">
-                  <LogOut className="mr-2 h-3.5 w-3.5" /> Sign out
-                </Link>
+
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="cursor-pointer text-red-500 focus:text-red-500"
+              >
+                <LogOut className="mr-2 h-3.5 w-3.5" /> Sign out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </header>
 
-        {/* Content */}
         <main className="flex-1">
           <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
             {(title || actions) && (
@@ -212,9 +242,7 @@ export function AppShell({
                   <h2 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">
                     {title}
                   </h2>
-                  {subtitle && (
-                    <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
-                  )}
+                  {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
                 </div>
                 {actions && <div className="flex items-center gap-2">{actions}</div>}
               </div>

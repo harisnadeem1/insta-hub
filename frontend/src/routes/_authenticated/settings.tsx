@@ -7,7 +7,7 @@ import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import { currentUser } from "@/lib/mock-data";
 
-export const Route = createFileRoute("/settings")({
+export const Route = createFileRoute("/_authenticated/settings")({
   head: () => ({
     meta: [
       { title: "Settings — InstaNest" },
@@ -86,7 +86,11 @@ function SettingsPage() {
               defaultChecked
             />
             <Toggle label="Weekly email digest" hint="Summary of stats every Monday." />
-            <Toggle label="Highlight top movers" hint="Show trend badges on KPI cards." defaultChecked />
+            <Toggle
+              label="Highlight top movers"
+              hint="Show trend badges on KPI cards."
+              defaultChecked
+            />
           </div>
         </Section>
 

@@ -1,0 +1,17 @@
+{
+  "watch": ["src"],
+  "ext": "js,mjs,cjs,json",
+  "ignore": [
+    ".pw-instagram-session/**",
+    "tmp/**",
+    "temp/**",
+    "debug/**",
+    "playwright-report/**",
+    "test-results/**",
+    "storage/**",
+    "sessions/**",
+    "screenshots/**",
+    "downloads/**",
+    "*.log"
+  ]
+}

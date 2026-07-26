@@ -1,36 +1,96 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { isAuthenticated, setAuth } from "@/lib/auth-storage";
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 export const Route = createFileRoute("/auth")({
-  head: () => ({
-    meta: [
-      { title: "Sign in — InstaNest" },
-      {
-        name: "description",
-        content: "Sign in to InstaNest to track public Instagram stats by member and profile.",
-      },
-      { property: "og:title", content: "Sign in — InstaNest" },
-      {
-        property: "og:description",
-        content: "Sign in to track public Instagram stats by member and profile.",
-      },
-    ],
-  }),
+  ssr: false,
+  beforeLoad: () => {
+    if (isAuthenticated()) {
+      throw redirect({ to: "/" });
+    }
+  },
   component: AuthPage,
 });
 
+type AuthMode = "login" | "signup";
+
 function AuthPage() {
   const navigate = useNavigate();
+  const [mode, setMode] = useState<AuthMode>("login");
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const [formData, setFormData] = useState({
+    full_name: "",
+    email: "",
+    password: "",
+  });
+
+  const isSignup = mode === "signup";
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData((prev) => ({
+      ...prev,
+      [e.target.id]: e.target.value,
+    }));
+  };
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode);
+    setError("");
+    setSuccessMessage("");
+  };
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setTimeout(() => navigate({ to: "/" }), 400);
+    setError("");
+    setSuccessMessage("");
+
+    try {
+      const endpoint = isSignup ? "/auth/signup" : "/auth/login";
+
+      const payload = isSignup
+        ? {
+            full_name: formData.full_name,
+            email: formData.email,
+            password: formData.password,
+          }
+        : {
+            email: formData.email,
+            password: formData.password,
+          };
+
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.message || "Authentication failed");
+      }
+
+      setAuth(data.token, data.user);
+
+      setSuccessMessage(isSignup ? "Account created successfully." : "Signed in successfully.");
+
+      navigate({ to: "/" });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -38,12 +98,60 @@ function AuthPage() {
       <div className="flex items-center justify-center px-6 py-10 sm:px-10">
         <div className="w-full max-w-sm">
           <Logo className="mb-10" />
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Sign in</h1>
+
+          <div className="mb-6 flex rounded-lg border border-border bg-muted/30 p-1">
+            <button
+              type="button"
+              onClick={() => switchMode("login")}
+              className={`flex-1 rounded-md px-3 py-2 text-sm transition ${
+                mode === "login"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Sign in
+            </button>
+            <button
+              type="button"
+              onClick={() => switchMode("signup")}
+              className={`flex-1 rounded-md px-3 py-2 text-sm transition ${
+                mode === "signup"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Create account
+            </button>
+          </div>
+
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
+            {isSignup ? "Create your account" : "Sign in"}
+          </h1>
+
           <p className="mt-1 text-sm text-muted-foreground">
-            Track public Instagram stats by member and profile.
+            {isSignup
+              ? "Create an InstaNest account to manage members and track public Instagram stats."
+              : "Track public Instagram stats by member and profile."}
           </p>
 
           <form onSubmit={submit} className="mt-8 space-y-4">
+            {isSignup ? (
+              <div className="space-y-1.5">
+                <Label htmlFor="full_name" className="text-xs">
+                  Full name
+                </Label>
+                <Input
+                  id="full_name"
+                  type="text"
+                  required={isSignup}
+                  placeholder="Haris Nadeem"
+                  value={formData.full_name}
+                  onChange={handleChange}
+                  className="h-10"
+                />
+              </div>
+            ) : null}
+
             <div className="space-y-1.5">
               <Label htmlFor="email" className="text-xs">
                 Email
@@ -53,41 +161,60 @@ function AuthPage() {
                 type="email"
                 required
                 placeholder="you@company.com"
-                defaultValue="alex@instanest.app"
+                value={formData.email}
+                onChange={handleChange}
                 className="h-10"
               />
             </div>
+
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password" className="text-xs">
                   Password
                 </Label>
-                <button
-                  type="button"
-                  className="text-[11px] text-muted-foreground hover:text-foreground"
-                >
-                  Forgot?
-                </button>
+                {!isSignup ? (
+                  <button
+                    type="button"
+                    className="text-[11px] text-muted-foreground hover:text-foreground"
+                  >
+                    Forgot?
+                  </button>
+                ) : null}
               </div>
+
               <Input
                 id="password"
                 type="password"
                 required
                 placeholder="••••••••"
-                defaultValue="demo1234"
+                value={formData.password}
+                onChange={handleChange}
                 className="h-10"
               />
             </div>
 
+            {error ? <p className="text-sm text-red-500">{error}</p> : null}
+            {successMessage ? <p className="text-sm text-green-500">{successMessage}</p> : null}
+
             <Button type="submit" className="h-10 w-full" disabled={loading}>
-              {loading ? "Signing in…" : "Sign in"}
+              {loading
+                ? isSignup
+                  ? "Creating account..."
+                  : "Signing in..."
+                : isSignup
+                  ? "Create account"
+                  : "Sign in"}
             </Button>
 
             <div className="text-center text-xs text-muted-foreground">
-              New here?{" "}
-              <Link to="/auth" className="text-primary hover:underline">
-                Create an account
-              </Link>
+              {isSignup ? "Already have an account? " : "New here? "}
+              <button
+                type="button"
+                onClick={() => switchMode(isSignup ? "login" : "signup")}
+                className="text-primary hover:underline"
+              >
+                {isSignup ? "Sign in" : "Create an account"}
+              </button>
             </div>
           </form>
 
@@ -126,9 +253,7 @@ function AuthPage() {
                 <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
                   {s.k}
                 </div>
-                <div className="mt-1 tabular-nums text-lg font-semibold text-foreground">
-                  {s.v}
-                </div>
+                <div className="mt-1 tabular-nums text-lg font-semibold text-foreground">{s.v}</div>
               </div>
             ))}
           </div>

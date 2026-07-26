@@ -11,12 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import {
   snapshots,
@@ -29,7 +24,7 @@ import {
   type Snapshot,
 } from "@/lib/mock-data";
 
-export const Route = createFileRoute("/snapshots")({
+export const Route = createFileRoute("/_authenticated/snapshots")({
   head: () => ({
     meta: [
       { title: "Snapshots — InstaNest" },
@@ -67,7 +62,9 @@ function SnapshotsPage() {
   }, [profileFilter, memberFilter, sourceFilter]);
 
   const download = (type: "csv" | "json") => {
-    toast.success(`Export started`, { description: `${rows.length} rows as ${type.toUpperCase()}` });
+    toast.success(`Export started`, {
+      description: `${rows.length} rows as ${type.toUpperCase()}`,
+    });
   };
 
   return (
@@ -199,7 +196,7 @@ function SnapshotsPage() {
             <DialogTitle className="text-sm">Raw payload</DialogTitle>
           </DialogHeader>
           <pre className="max-h-[400px] overflow-auto rounded-md border border-border bg-background/60 p-3 text-[11px] leading-relaxed text-muted-foreground">
-{JSON.stringify(selected?.raw_payload ?? {}, null, 2)}
+            {JSON.stringify(selected?.raw_payload ?? {}, null, 2)}
           </pre>
         </DialogContent>
       </Dialog>

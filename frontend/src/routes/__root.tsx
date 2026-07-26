@@ -81,8 +81,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Overview — InstaNest" },
       {
         name: "description",
-        content:
-          "Aggregated public Instagram stats across all your tracked members and profiles.",
+        content: "Aggregated public Instagram stats across all your tracked members and profiles.",
       },
       { name: "author", content: "InstaNest" },
       { property: "og:title", content: "Overview — InstaNest" },
@@ -93,9 +92,20 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Overview — InstaNest" },
-      { name: "twitter:description", content: "Aggregated public Instagram stats across all your tracked members and profiles." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3fecb14c-af0f-474b-bd06-89805e0cb61d/id-preview-7e924c19--9c72031b-15fc-41da-afc5-5935e98fdbae.lovable.app-1784995606801.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3fecb14c-af0f-474b-bd06-89805e0cb61d/id-preview-7e924c19--9c72031b-15fc-41da-afc5-5935e98fdbae.lovable.app-1784995606801.png" },
+      {
+        name: "twitter:description",
+        content: "Aggregated public Instagram stats across all your tracked members and profiles.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3fecb14c-af0f-474b-bd06-89805e0cb61d/id-preview-7e924c19--9c72031b-15fc-41da-afc5-5935e98fdbae.lovable.app-1784995606801.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/3fecb14c-af0f-474b-bd06-89805e0cb61d/id-preview-7e924c19--9c72031b-15fc-41da-afc5-5935e98fdbae.lovable.app-1784995606801.png",
+      },
     ],
     links: [
       {
