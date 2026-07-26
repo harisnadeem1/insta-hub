@@ -80,7 +80,7 @@ function extractLinkHref(html, relValue) {
 // requests). Individual post shortcodes are still visible as plain anchor
 // hrefs in the rendered grid though, so we can pull those and then visit
 // each post page individually to get its real comment/view counts.
-function extractRecentPostShortcodes(html, limit = 12) {
+function extractRecentPostShortcodes(html, limit = Infinity) {
   if (!html) return [];
 
   const seen = new Set();
@@ -142,17 +142,19 @@ function parsePostStatsFromHtml(html) {
 
   const text = cleanText(ogDescription);
 
-  // e.g. "1,234 likes, 56 comments - username on Instagram: ..."
+  console.log("post og:description", text.slice(0, 300));
+
   const commentsMatch =
     text.match(/([\d.,]+(?:\s*[KMB])?)\s+comments?/i) ||
     html.match(/"edge_media_to_comment"\s*:\s*\{\s*"count"\s*:\s*(\d+)/i) ||
-    html.match(/"edge_media_to_parent_comment"\s*:\s*\{\s*"count"\s*:\s*(\d+)/i);
+    html.match(/"edge_media_to_parent_comment"\s*:\s*\{\s*"count"\s*:\s*(\d+)/i) ||
+    html.match(/"comment_count"\s*:\s*(\d+)/i);
 
-  // e.g. "12,345 views" for reels/videos
   const viewsMatch =
     text.match(/([\d.,]+(?:\s*[KMB])?)\s+views?/i) ||
     html.match(/"video_view_count"\s*:\s*(\d+)/i) ||
-    html.match(/"video_play_count"\s*:\s*(\d+)/i);
+    html.match(/"video_play_count"\s*:\s*(\d+)/i) ||
+    html.match(/"view_count"\s*:\s*(\d+)/i);
 
   return {
     comments_count: commentsMatch ? parseCompactNumber(commentsMatch[1]) : 0,

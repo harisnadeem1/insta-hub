@@ -212,7 +212,7 @@ function getShortcodesFromNode(node) {
     .filter((item) => Boolean(item.shortcode));
 }
 
-async function enrichWithRecentPostStats(normalized, shortcodes, limit = 12, concurrency = 4) {
+async function enrichWithRecentPostStats(normalized, shortcodes, limit = 12, concurrency = 2) {
   if (!Array.isArray(shortcodes) || shortcodes.length === 0) {
     console.log("no post shortcodes available to enrich comments/views");
     return normalized;
@@ -226,12 +226,19 @@ async function enrichWithRecentPostStats(normalized, shortcodes, limit = 12, con
   async function fetchOne({ shortcode, type }) {
     try {
       const { html } = await withTimeout(
-        fetchPostPage(shortcode, type, { timeout: 8000, retries: 0 }),
-        8000,
+        fetchPostPage(shortcode, type, { timeout: 15000, retries: 1 }),
+        20000,
         `Post page ${shortcode}`
       );
 
       const stats = parsePostStatsFromHtml(html);
+
+      console.log("post stats parsed", {
+        shortcode,
+        comments: stats.comments_count,
+        views: stats.views_count,
+      });
+
       totalComments += stats.comments_count;
       totalViews += stats.views_count;
       succeeded += 1;
@@ -243,23 +250,9 @@ async function enrichWithRecentPostStats(normalized, shortcodes, limit = 12, con
     }
   }
 
-  // Fetch in small concurrent batches rather than one at a time - this is
-  // the main thing that made refreshes slow (12 sequential requests could
-  // take minutes; batches of `concurrency` at a time cut that dramatically).
   for (let i = 0; i < sample.length; i += concurrency) {
     const batch = sample.slice(i, i + concurrency);
     await Promise.all(batch.map(fetchOne));
-  }
-
-  console.log("post-level enrichment complete", {
-    sampled: sample.length,
-    succeeded,
-    totalComments,
-    totalViews,
-  });
-
-  if (succeeded === 0) {
-    return normalized;
   }
 
   return {
@@ -420,17 +413,26 @@ exports.scrapePublicProfile = async ({ username }) => {
 
   console.log("10. falling back to browser scraper");
 
-  if (METHOD_ENABLED.browser_scraper) {
+  console.log("10. falling back to browser scraper");
+
+if (METHOD_ENABLED.browser_scraper) {
   try {
     const browserPage = await withTimeout(
-      fetchProfilePageWithBrowser(requestedUsername),
-      45000,
-      "Browser scraper fetchProfilePageWithBrowser"
-    );
+  fetchProfilePageWithBrowser(requestedUsername, {
+    postLimit: Infinity,
+    postConcurrency: 1,
+  }),
+  600000,
+  "Browser scraper fetchProfilePageWithBrowser"
+);
 
     console.log("11. browser scraper returned", {
       htmlLength: browserPage?.html?.length || 0,
       responsesCount: browserPage?.responses?.length || 0,
+     processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
+      postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+      comments_count: browserPage?.comments_count || 0,
+      visible_views_count: browserPage?.visible_views_count || 0,
     });
 
     const networkProfile = findProfileInNetworkResponses(
@@ -469,10 +471,24 @@ exports.scrapePublicProfile = async ({ username }) => {
         "custom_browser_network_scraper",
         requestedUsername
       );
-      const shortcodes = getShortcodesFromNode(networkProfile).length
-        ? getShortcodesFromNode(networkProfile)
-        : extractRecentPostShortcodes(browserPage.html);
-      return await enrichWithRecentPostStats(normalizedNetwork, shortcodes);
+
+      normalizedNetwork.comments_count =
+        Number(browserPage?.comments_count || 0);
+      normalizedNetwork.visible_views_count =
+        Number(browserPage?.visible_views_count || 0);
+
+      normalizedNetwork.raw_payload = {
+        ...normalizedNetwork.raw_payload,
+        browser_post_stats: {
+          processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
+          postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+          comments_count: browserPage?.comments_count || 0,
+          visible_views_count: browserPage?.visible_views_count || 0,
+          shortcodes: browserPage?.shortcodes || [],
+        },
+      };
+
+      return normalizedNetwork;
     }
 
     console.log("13. network profile missing counts, falling back to browser HTML parse");
@@ -486,15 +502,27 @@ exports.scrapePublicProfile = async ({ username }) => {
       requestedUsername
     );
 
+    normalized.comments_count =
+      Number(browserPage?.comments_count || 0);
+    normalized.visible_views_count =
+      Number(browserPage?.visible_views_count || 0);
+
+    normalized.raw_payload = {
+      ...normalized.raw_payload,
+      browser_post_stats: {
+        processedPostCount: browserPage?.post_stats_meta?.processedPostCount || browserPage?.post_stats_meta?.sampledPostCount || 0,
+        postSuccessCount: browserPage?.post_stats_meta?.postSuccessCount || 0,
+        comments_count: browserPage?.comments_count || 0,
+        visible_views_count: browserPage?.visible_views_count || 0,
+        shortcodes: browserPage?.shortcodes || [],
+      },
+    };
+
     if (hasMeaningfulCounts(normalized)) {
-      const shortcodes = extractRecentPostShortcodes(browserPage.html);
-      return await enrichWithRecentPostStats(normalized, shortcodes);
+      return normalized;
     }
 
     if (!bestZeroCountResult) {
-      // This is the last method available - return what we have even if
-      // it's zero, so at least the profile record/snapshot isn't skipped
-      // entirely, and the source field makes it obvious this needs review.
       return normalized;
     }
 
@@ -535,9 +563,9 @@ exports.scrapePublicProfile = async ({ username }) => {
 
     throw finalError;
   }
-  } else {
-    console.log("10. skipping browser scraper (disabled)");
-  }
+} else {
+  console.log("10. skipping browser scraper (disabled)");
+}
 
   // If we get here, every enabled method either failed or returned a
   // zero-count profile with no better fallback to reach for.
