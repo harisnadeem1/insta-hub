@@ -20,7 +20,12 @@ connection.on("error", (err) => {
   console.error("[worker] redis error", err);
 });
 
-const concurrency = Number(process.env.SCAN_WORKER_CONCURRENCY || 3);
+const concurrency = 1;
+const interJobDelayMs = Number(process.env.SCAN_JOB_DELAY_MS || 15000);
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 const worker = new Worker(
   "instagram-profile-scan",
@@ -34,26 +39,60 @@ const worker = new Worker(
       username,
     });
 
-    await job.updateProgress({ stage: "scraping", pct: 5 });
+    try {
+      await job.updateProgress({
+        stage: "scraping",
+        pct: 10,
+        username,
+        profileId,
+      });
 
-    const profile = await profileService.refreshProfile({ userId, profileId });
+      const profile = await profileService.refreshProfile({ userId, profileId });
 
-    await job.updateProgress({ stage: "done", pct: 100 });
+      await job.updateProgress({
+        stage: "saving",
+        pct: 90,
+        username,
+        profileId,
+      });
 
-    console.log("[worker] finished scan job", {
-      jobId: job.id,
-      profileId: profile?.id,
-    });
+      await job.updateProgress({
+        stage: "done",
+        pct: 100,
+        username,
+        profileId,
+      });
 
-    return {
-      profileId: profile?.id,
-      followers_count: profile?.current_followers_count,
-      posts_count: profile?.current_posts_count,
-      comments_count: profile?.current_comments_count,
-      visible_views_count: profile?.current_visible_views_count,
-    };
+      console.log("[worker] finished scan job", {
+        jobId: job.id,
+        profileId: profile?.id,
+      });
+
+      await sleep(interJobDelayMs);
+
+      return {
+        profileId: profile?.id,
+        username,
+        followers_count: profile?.current_followers_count,
+        posts_count: profile?.current_posts_count,
+        comments_count: profile?.current_comments_count,
+        visible_views_count: profile?.current_visible_views_count,
+      };
+    } catch (error) {
+      await job.updateProgress({
+        stage: "failed",
+        pct: 100,
+        username,
+        profileId,
+      });
+
+      throw error;
+    }
   },
-  { connection, concurrency }
+  {
+    connection,
+    concurrency,
+  }
 );
 
 worker.on("ready", () => {

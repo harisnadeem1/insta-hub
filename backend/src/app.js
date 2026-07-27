@@ -5,7 +5,8 @@ require('dotenv').config();
 const authRoutes = require('./routes/authRoutes');
 const memberRoutes = require("./routes/memberRoutes");
 const profileRoutes = require("./routes/profileRoutes");
-
+const dashboardRoutes = require("./routes/dashboardRoutes");
+const settingsRoutes = require("./routes/settingsRoutes");
 
 const errorMiddleware = require('./middleware/errorMiddleware');
 
@@ -37,6 +38,8 @@ app.get('/api/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use("/api/members", memberRoutes);
 app.use("/api/profiles", profileRoutes);
+app.use("/api/dashboard", dashboardRoutes);
+app.use("/api/settings", settingsRoutes);
 
 app.use(errorMiddleware);
 

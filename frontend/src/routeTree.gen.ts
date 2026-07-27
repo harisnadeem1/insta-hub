@@ -15,7 +15,7 @@ import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedProfilesRouteImport } from './routes/_authenticated/profiles'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
-import { Route as AuthenticatedSnapshotsRouteImport } from './routes/_authenticated/snapshots'
+import { Route as AuthenticatedSyncProgressRouteImport } from './routes/_authenticated/sync-progress'
 
 const AuthenticatedRoute = AuthenticatedRouteImport.update({
   id: '/_authenticated',
@@ -46,11 +46,12 @@ const AuthenticatedSettingsRoute = AuthenticatedSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
-const AuthenticatedSnapshotsRoute = AuthenticatedSnapshotsRouteImport.update({
-  id: '/snapshots',
-  path: '/snapshots',
-  getParentRoute: () => AuthenticatedRoute,
-} as any)
+const AuthenticatedSyncProgressRoute =
+  AuthenticatedSyncProgressRouteImport.update({
+    id: '/sync-progress',
+    path: '/sync-progress',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -58,14 +59,14 @@ export interface FileRoutesByFullPath {
   '/members': typeof AuthenticatedMembersRoute
   '/profiles': typeof AuthenticatedProfilesRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/snapshots': typeof AuthenticatedSnapshotsRoute
+  '/sync-progress': typeof AuthenticatedSyncProgressRoute
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
   '/members': typeof AuthenticatedMembersRoute
   '/profiles': typeof AuthenticatedProfilesRoute
   '/settings': typeof AuthenticatedSettingsRoute
-  '/snapshots': typeof AuthenticatedSnapshotsRoute
+  '/sync-progress': typeof AuthenticatedSyncProgressRoute
   '/': typeof AuthenticatedIndexRoute
 }
 export interface FileRoutesById {
@@ -75,15 +76,15 @@ export interface FileRoutesById {
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/profiles': typeof AuthenticatedProfilesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
-  '/_authenticated/snapshots': typeof AuthenticatedSnapshotsRoute
+  '/_authenticated/sync-progress': typeof AuthenticatedSyncProgressRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/members' | '/profiles' | '/settings' | '/snapshots'
+    '/' | '/auth' | '/members' | '/profiles' | '/settings' | '/sync-progress'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/members' | '/profiles' | '/settings' | '/snapshots' | '/'
+  to: '/auth' | '/members' | '/profiles' | '/settings' | '/sync-progress' | '/'
   id:
     | '__root__'
     | '/_authenticated'
@@ -91,7 +92,7 @@ export interface FileRouteTypes {
     | '/_authenticated/members'
     | '/_authenticated/profiles'
     | '/_authenticated/settings'
-    | '/_authenticated/snapshots'
+    | '/_authenticated/sync-progress'
     | '/_authenticated/'
   fileRoutesById: FileRoutesById
 }
@@ -144,11 +145,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedSettingsRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
-    '/_authenticated/snapshots': {
-      id: '/_authenticated/snapshots'
-      path: '/snapshots'
-      fullPath: '/snapshots'
-      preLoaderRoute: typeof AuthenticatedSnapshotsRouteImport
+    '/_authenticated/sync-progress': {
+      id: '/_authenticated/sync-progress'
+      path: '/sync-progress'
+      fullPath: '/sync-progress'
+      preLoaderRoute: typeof AuthenticatedSyncProgressRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
   }
@@ -158,7 +159,7 @@ interface AuthenticatedRouteChildren {
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedProfilesRoute: typeof AuthenticatedProfilesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
-  AuthenticatedSnapshotsRoute: typeof AuthenticatedSnapshotsRoute
+  AuthenticatedSyncProgressRoute: typeof AuthenticatedSyncProgressRoute
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
 }
 
@@ -166,7 +167,7 @@ const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedProfilesRoute: AuthenticatedProfilesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
-  AuthenticatedSnapshotsRoute: AuthenticatedSnapshotsRoute,
+  AuthenticatedSyncProgressRoute: AuthenticatedSyncProgressRoute,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
 }
 

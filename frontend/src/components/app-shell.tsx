@@ -4,19 +4,17 @@ import {
   LayoutDashboard,
   Users,
   AtSign,
-  History,
   Settings as SettingsIcon,
-  Search,
   RefreshCw,
   Menu,
   X,
   ChevronDown,
   LogOut,
   User,
+  Activity,
 } from "lucide-react";
 import { Logo } from "./logo";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,10 +24,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { getUser, clearAuth } from "@/lib/auth-storage";
+import { getUser, clearAuth, getToken } from "@/lib/auth-storage";
+
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 type NavItem = {
-  to: "/" | "/members" | "/profiles" | "/snapshots" | "/settings";
+  to: "/" | "/members" | "/profiles" | "/sync-progress" | "/settings";
   label: string;
   icon: typeof LayoutDashboard;
   exact?: boolean;
@@ -39,8 +39,10 @@ const navItems: NavItem[] = [
   { to: "/", label: "Overview", icon: LayoutDashboard, exact: true },
   { to: "/members", label: "Members", icon: Users },
   { to: "/profiles", label: "Profiles", icon: AtSign },
-  { to: "/snapshots", label: "Snapshots", icon: History },
+  { to: "/sync-progress", label: "Sync Progress", icon: Activity },
+
   { to: "/settings", label: "Settings", icon: SettingsIcon },
+
 ];
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
@@ -57,18 +59,16 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
             key={item.to}
             to={item.to}
             onClick={onNavigate}
-            className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${
-              active
+            className={`group flex items-center gap-3 rounded-md px-3 py-2 text-sm transition-colors ${active
                 ? "bg-sidebar-accent text-sidebar-accent-foreground"
                 : "text-sidebar-foreground/70 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
-            }`}
+              }`}
           >
             <Icon
-              className={`h-4 w-4 shrink-0 ${
-                active
+              className={`h-4 w-4 shrink-0 ${active
                   ? "text-primary"
                   : "text-sidebar-foreground/50 group-hover:text-sidebar-foreground/80"
-              }`}
+                }`}
             />
             <span className="truncate">{item.label}</span>
           </Link>
@@ -117,6 +117,7 @@ export function AppShell({
 }) {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [syncLoading, setSyncLoading] = useState(false);
 
   const user = useMemo(() => getUser(), []);
   const email = user?.email || "";
@@ -179,24 +180,50 @@ export function AppShell({
             )}
           </div>
 
-          <div className="relative hidden md:block">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="Search profiles, members…"
-              className="h-8 w-56 pl-8 text-xs lg:w-72"
-            />
-          </div>
+
 
           <Button
             variant="outline"
             size="sm"
             className="h-8 gap-1.5"
-            onClick={() =>
-              toast.success("Sync started", { description: "Refreshing latest stats…" })
-            }
+            disabled={syncLoading}
+            onClick={async () => {
+              const token = getToken();
+
+              try {
+                setSyncLoading(true);
+
+                const response = await fetch(`${API_BASE_URL}/profiles/refresh-all`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+
+                const data = await response.json().catch(() => null);
+
+                if (!response.ok) {
+                  toast.error(data?.message || "Failed to start sync for all profiles");
+                  return;
+                }
+
+                toast.success(
+                  data?.batch?.total
+                    ? `Started syncing ${data.batch.total} profiles`
+                    : "Bulk sync started",
+                );
+
+                await navigate({ to: "/sync-progress" });
+              } catch (error) {
+                console.error("Bulk sync failed:", error);
+                toast.error("Could not start bulk sync");
+              } finally {
+                setSyncLoading(false);
+              }
+            }}
           >
-            <RefreshCw className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">Sync</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${syncLoading ? "animate-spin" : ""}`} />
+            <span className="hidden sm:inline">{syncLoading ? "Starting..." : "Sync"}</span>
           </Button>
 
           <DropdownMenu>

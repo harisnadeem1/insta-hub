@@ -11,6 +11,9 @@ import {
   MessageSquare,
   Eye,
   UserCircle2,
+  Activity,
+  Pencil,
+  Trash2,
 } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
@@ -38,6 +41,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getToken } from "@/lib/auth-storage";
@@ -136,6 +149,7 @@ function ProfilesPage() {
   const [selected, setSelected] = useState<ProfileItem | null>(null);
   const [addProfileOpen, setAddProfileOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [syncAllLoading, setSyncAllLoading] = useState(false);
 
   const { summary, members, profiles } = data;
 
@@ -172,9 +186,67 @@ function ProfilesPage() {
       title="Profiles"
       subtitle="Public Instagram accounts tracked by username."
       actions={
-        <Button size="sm" className="gap-1.5" onClick={() => setAddProfileOpen(true)}>
-          <Plus className="h-3.5 w-3.5" /> Add profile
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => router.navigate({ to: "/sync-progress" })}
+          >
+            <Activity className="h-3.5 w-3.5" />
+            Sync progress
+          </Button>
+
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            disabled={syncAllLoading || profiles.length === 0}
+            onClick={async () => {
+              const token = getToken();
+
+              try {
+                setSyncAllLoading(true);
+
+                const response = await fetch(`${API_BASE_URL}/profiles/refresh-all`, {
+                  method: "POST",
+                  headers: {
+                    Authorization: `Bearer ${token}`,
+                  },
+                });
+
+                const data = await response.json().catch(() => null);
+
+                if (!response.ok) {
+                  toast.error(data?.message || "Failed to start sync for all profiles");
+                  return;
+                }
+
+                toast.success(
+                  data?.batch?.total
+                    ? `Started syncing ${data.batch.total} profiles`
+                    : "Bulk sync started",
+                );
+
+                await router.navigate({ to: "/sync-progress" });
+              } catch (error) {
+                console.error("Bulk sync failed:", error);
+                toast.error("Could not start bulk sync");
+              } finally {
+                if (isMountedRef.current) {
+                  setSyncAllLoading(false);
+                }
+              }
+            }}
+          >
+            <RefreshCw className={`h-3.5 w-3.5 ${syncAllLoading ? "animate-spin" : ""}`} />
+            {syncAllLoading ? "Starting..." : "Sync all"}
+          </Button>
+
+          <Button size="sm" className="gap-1.5" onClick={() => setAddProfileOpen(true)}>
+            <Plus className="h-3.5 w-3.5" /> Add profile
+          </Button>
+        </div>
       }
     >
       <div className="mb-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
@@ -541,6 +613,130 @@ function AddProfileSheet({
   );
 }
 
+function EditProfileSheet({
+  open,
+  profile,
+  submitting,
+  onOpenChange,
+  onSubmit,
+}: {
+  open: boolean;
+  profile: ProfileItem;
+  submitting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (values: {
+    profile_name: string | null;
+    profile_url: string | null;
+    is_public: boolean;
+    is_active: boolean;
+  }) => Promise<void>;
+}) {
+  const [profileName, setProfileName] = useState(profile.profile_name || "");
+  const [profileUrl, setProfileUrl] = useState(profile.profile_url || "");
+  const [isPublic, setIsPublic] = useState(profile.is_public ? "true" : "false");
+  const [isActive, setIsActive] = useState(profile.is_active ? "true" : "false");
+
+  useEffect(() => {
+    if (open) {
+      setProfileName(profile.profile_name || "");
+      setProfileUrl(profile.profile_url || "");
+      setIsPublic(profile.is_public ? "true" : "false");
+      setIsActive(profile.is_active ? "true" : "false");
+    }
+  }, [open, profile]);
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="text-left">
+          <SheetTitle>Edit profile</SheetTitle>
+          <SheetDescription>
+            Update profile details for @{profile.username}.
+          </SheetDescription>
+        </SheetHeader>
+
+        <form
+          className="mt-6 space-y-4"
+          onSubmit={async (e) => {
+            e.preventDefault();
+
+            await onSubmit({
+              profile_name: profileName.trim() || null,
+              profile_url: profileUrl.trim() || null,
+              is_public: isPublic === "true",
+              is_active: isActive === "true",
+            });
+          }}
+        >
+          <div className="space-y-1.5">
+            <Label className="text-xs">Username</Label>
+            <Input value={`@${profile.username}`} disabled />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit_profile_name_${profile.id}`} className="text-xs">
+              Profile name
+            </Label>
+            <Input
+              id={`edit_profile_name_${profile.id}`}
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="e.g. Sara Style Hub"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label htmlFor={`edit_profile_url_${profile.id}`} className="text-xs">
+              Profile URL
+            </Label>
+            <Input
+              id={`edit_profile_url_${profile.id}`}
+              value={profileUrl}
+              onChange={(e) => setProfileUrl(e.target.value)}
+              placeholder="https://instagram.com/sara.stylehub"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Visibility</Label>
+            <select
+              value={isPublic}
+              onChange={(e) => setIsPublic(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background"
+            >
+              <option value="true">Public</option>
+              <option value="false">Private</option>
+            </select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Status</Label>
+            <select
+              value={isActive}
+              onChange={(e) => setIsActive(e.target.value)}
+              className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-offset-background"
+            >
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Saving..." : "Save changes"}
+            </Button>
+          </div>
+        </form>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
 function StatusBadges({ p }: { p: Pick<ProfileItem, "is_active" | "is_public"> }) {
   return (
     <div className="flex flex-wrap gap-1">
@@ -615,6 +811,11 @@ async function pollRefreshStatus(
 }
 
 function RowMenu({ profile, onChanged }: { profile: ProfileItem; onChanged: () => Promise<void> }) {
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
   const handleRefresh = async () => {
     const token = getToken();
 
@@ -647,52 +848,139 @@ function RowMenu({ profile, onChanged }: { profile: ProfileItem; onChanged: () =
     }
   };
 
-  const handleDeactivate = async () => {
+  const handleDelete = async () => {
     const token = getToken();
 
-    const response = await fetch(`${API_BASE_URL}/profiles/${profile.id}`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({
-        is_active: false,
-      }),
-    });
+    try {
+      setDeleting(true);
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => null);
-      toast.error(errorData?.message || "Failed to update profile");
-      return;
+      const response = await fetch(`${API_BASE_URL}/profiles/${profile.id}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        toast.error(errorData?.message || "Failed to delete profile");
+        return;
+      }
+
+      toast.success("Profile deleted");
+      setDeleteOpen(false);
+      await onChanged();
+    } catch (error) {
+      console.error("Delete profile failed:", error);
+      toast.error("Could not delete profile");
+    } finally {
+      setDeleting(false);
     }
+  };
 
-    toast.success("Profile updated");
-    await onChanged();
+  const handleEditSubmit = async (values: {
+    profile_name: string | null;
+    profile_url: string | null;
+    is_public: boolean;
+    is_active: boolean;
+  }) => {
+    const token = getToken();
+
+    try {
+      setSavingEdit(true);
+
+      const response = await fetch(`${API_BASE_URL}/profiles/${profile.id}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(values),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        toast.error(errorData?.message || "Failed to update profile");
+        return;
+      }
+
+      toast.success("Profile updated");
+      setEditOpen(false);
+      await onChanged();
+    } catch (error) {
+      console.error("Update profile failed:", error);
+      toast.error("Could not update profile");
+    } finally {
+      setSavingEdit(false);
+    }
   };
 
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-7 w-7" type="button">
-          <MoreHorizontal className="h-4 w-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end">
-        <DropdownMenuItem>View details</DropdownMenuItem>
-        <DropdownMenuItem onClick={handleRefresh}>
-          <RefreshCw className="mr-2 h-3.5 w-3.5" /> Refresh stats
-        </DropdownMenuItem>
-        <DropdownMenuItem>Edit</DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onClick={handleDeactivate}
-          className="text-destructive focus:text-destructive"
-        >
-          Deactivate
-        </DropdownMenuItem>
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="ghost" size="icon" className="h-7 w-7" type="button">
+            <MoreHorizontal className="h-4 w-4" />
+          </Button>
+        </DropdownMenuTrigger>
+
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem onClick={handleRefresh}>
+            <RefreshCw className="mr-2 h-3.5 w-3.5" />
+            Refresh stats
+          </DropdownMenuItem>
+
+          <DropdownMenuItem onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-2 h-3.5 w-3.5" />
+            Edit
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            onClick={() => setDeleteOpen(true)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="mr-2 h-3.5 w-3.5" />
+            Delete
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <EditProfileSheet
+        open={editOpen}
+        profile={profile}
+        submitting={savingEdit}
+        onOpenChange={setEditOpen}
+        onSubmit={handleEditSubmit}
+      />
+
+      <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete profile?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete @{profile.username} and its saved snapshots.
+              This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                handleDelete();
+              }}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }
 

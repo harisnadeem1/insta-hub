@@ -3,17 +3,48 @@ import { Users, AtSign, MessageSquare, Eye, Clock, ArrowRight } from "lucide-rea
 import { AppShell } from "@/components/app-shell";
 import { KpiCard } from "@/components/kpi-card";
 import { Button } from "@/components/ui/button";
-import {
-  profiles,
-  members,
-  getMemberById,
-  getMemberTotals,
-  getOverallTotals,
-  formatCompact,
-  formatNumber,
-  formatRelative,
-} from "@/lib/mock-data";
+import { getToken } from "@/lib/auth-storage";
+import { formatCompact, formatNumber, formatRelative } from "@/lib/mock-data";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+
+type OverviewProfileItem = {
+  id: number;
+  member_id: number;
+  member_name: string;
+  username: string;
+  profile_name: string | null;
+  current_followers_count: number;
+  current_posts_count: number;
+  current_comments_count: number;
+  current_visible_views_count: number;
+  last_scraped_at: string | null;
+};
+
+type OverviewMemberRow = {
+  id: number;
+  name: string;
+  notes: string | null;
+  totals: {
+    count: number;
+    followers: number;
+    posts: number;
+    comments: number;
+    views: number;
+  };
+};
+
+type OverviewPageData = {
+  totals: {
+    followers: number;
+    posts: number;
+    comments: number;
+    views: number;
+  };
+  lastUpdated: string | null;
+  previewProfiles: OverviewProfileItem[];
+  memberRows: OverviewMemberRow[];
+};
 export const Route = createFileRoute("/_authenticated/")({
   head: () => ({
     meta: [
@@ -29,19 +60,27 @@ export const Route = createFileRoute("/_authenticated/")({
       },
     ],
   }),
+  loader: async (): Promise<OverviewPageData> => {
+    const token = getToken();
+
+    const response = await fetch(`${API_BASE_URL}/dashboard/overview`, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to load overview");
+    }
+
+    return response.json();
+  },
   component: Overview,
 });
 
 function Overview() {
-  const totals = getOverallTotals();
-  const previewProfiles = [...profiles]
-    .sort((a, b) => b.current_followers_count - a.current_followers_count)
-    .slice(0, 6);
-  const lastUpdated = [...profiles]
-    .map((p) => p.last_scraped_at)
-    .filter(Boolean)
-    .sort()
-    .reverse()[0];
+  const data = Route.useLoaderData();
+  const { totals, lastUpdated, previewProfiles, memberRows } = data;
 
   return (
     <AppShell
@@ -60,7 +99,6 @@ function Overview() {
           value={totals.followers}
           icon={<Users className="h-3.5 w-3.5" />}
           hint="Sum across all profiles"
-          delta="2.4%"
         />
         <KpiCard
           label="Total posts"
@@ -73,7 +111,6 @@ function Overview() {
           value={totals.comments}
           icon={<MessageSquare className="h-3.5 w-3.5" />}
           hint="Public post comments"
-          delta="1.1%"
         />
         <KpiCard
           label="Visible views"
@@ -98,7 +135,6 @@ function Overview() {
           </Button>
         </div>
 
-        {/* Desktop table */}
         <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-background/40 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -112,60 +148,55 @@ function Overview() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {previewProfiles.map((p) => {
-                const m = getMemberById(p.member_id);
-                return (
-                  <tr key={p.id} className="transition-colors hover:bg-accent/40">
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-foreground">@{p.username}</div>
-                      <div className="text-[11px] text-muted-foreground">{p.profile_name}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">{m?.name}</td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatNumber(p.current_followers_count)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums">
-                      {formatNumber(p.current_posts_count)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatNumber(p.current_comments_count)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {formatCompact(p.current_visible_views_count)}
-                    </td>
-                  </tr>
-                );
-              })}
+              {previewProfiles.map((p) => (
+                <tr key={p.id} className="transition-colors hover:bg-accent/40">
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-foreground">@{p.username}</div>
+                    <div className="text-[11px] text-muted-foreground">{p.profile_name}</div>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{p.member_name}</td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {formatNumber(p.current_followers_count)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums">
+                    {formatNumber(p.current_posts_count)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                    {formatNumber(p.current_comments_count)}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                    {formatCompact(p.current_visible_views_count)}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {/* Mobile cards */}
         <div className="grid gap-2 md:hidden">
-          {previewProfiles.map((p) => {
-            const m = getMemberById(p.member_id);
-            return (
-              <div key={p.id} className="rounded-xl border border-border bg-card p-4">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold text-foreground">
-                      @{p.username}
-                    </div>
-                    <div className="truncate text-[11px] text-muted-foreground">{m?.name}</div>
+          {previewProfiles.map((p) => (
+            <div key={p.id} className="rounded-xl border border-border bg-card p-4">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold text-foreground">
+                    @{p.username}
+                  </div>
+                  <div className="truncate text-[11px] text-muted-foreground">
+                    {p.member_name}
                   </div>
                 </div>
-                <div className="mt-3 grid grid-cols-4 gap-2 border-t border-border pt-3">
-                  <Stat label="Followers" value={p.current_followers_count} />
-                  <Stat label="Posts" value={p.current_posts_count} />
-                  <Stat label="Comments" value={p.current_comments_count} />
-                  <Stat label="Views" value={p.current_visible_views_count} />
-                </div>
               </div>
-            );
-          })}
+              <div className="mt-3 grid grid-cols-4 gap-2 border-t border-border pt-3">
+                <Stat label="Followers" value={p.current_followers_count} />
+                <Stat label="Posts" value={p.current_posts_count} />
+                <Stat label="Comments" value={p.current_comments_count} />
+                <Stat label="Views" value={p.current_visible_views_count} />
+              </div>
+            </div>
+          ))}
         </div>
 
-        {profiles.length === 0 && (
+        {previewProfiles.length === 0 && (
           <div className="mt-3 rounded-xl border border-dashed border-border bg-card/50 p-6 text-center">
             <div className="text-sm font-medium text-foreground">No profiles added yet</div>
             <p className="mt-1 text-xs text-muted-foreground">
@@ -195,80 +226,73 @@ function Overview() {
           </Button>
         </div>
 
-        {(() => {
-          const memberRows = members
-            .map((m) => ({ member: m, totals: getMemberTotals(m.id) }))
-            .sort((a, b) => b.totals.followers - a.totals.followers)
-            .slice(0, 8);
-          return (
-            <>
-              {/* Desktop table */}
-              <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-border bg-background/40 text-[11px] uppercase tracking-wider text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2.5 text-left font-medium">Member</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Accounts</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Followers</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Posts</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Comments</th>
-                      <th className="px-4 py-2.5 text-right font-medium">Views</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {memberRows.map(({ member, totals }) => (
-                      <tr key={member.id} className="transition-colors hover:bg-accent/40">
-                        <td className="px-4 py-3">
-                          <div className="font-medium text-foreground">{member.name}</div>
-                          {member.notes && (
-                            <div className="text-[11px] text-muted-foreground">{member.notes}</div>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums">{totals.count}</td>
-                        <td className="px-4 py-3 text-right tabular-nums">
-                          {formatNumber(totals.followers)}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums">
-                          {formatNumber(totals.posts)}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                          {formatNumber(totals.comments)}
-                        </td>
-                        <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                          {formatCompact(totals.views)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+        <>
+          <div className="hidden overflow-hidden rounded-xl border border-border bg-card md:block">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-background/40 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2.5 text-left font-medium">Member</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Accounts</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Followers</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Posts</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Comments</th>
+                  <th className="px-4 py-2.5 text-right font-medium">Views</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {memberRows.map((member) => (
+                  <tr key={member.id} className="transition-colors hover:bg-accent/40">
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{member.name}</div>
+                      {member.notes && (
+                        <div className="text-[11px] text-muted-foreground">{member.notes}</div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {member.totals.count}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatNumber(member.totals.followers)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      {formatNumber(member.totals.posts)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                      {formatNumber(member.totals.comments)}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                      {formatCompact(member.totals.views)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-              {/* Mobile cards */}
-              <div className="grid gap-2 md:hidden">
-                {memberRows.map(({ member, totals }) => (
-                  <div key={member.id} className="rounded-xl border border-border bg-card p-4">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <div className="truncate text-sm font-semibold text-foreground">
-                          {member.name}
-                        </div>
-                        <div className="truncate text-[11px] text-muted-foreground">
-                          {totals.count} {totals.count === 1 ? "account" : "accounts"}
-                        </div>
-                      </div>
+          <div className="grid gap-2 md:hidden">
+            {memberRows.map((member) => (
+              <div key={member.id} className="rounded-xl border border-border bg-card p-4">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-foreground">
+                      {member.name}
                     </div>
-                    <div className="mt-3 grid grid-cols-4 gap-2 border-t border-border pt-3">
-                      <Stat label="Followers" value={totals.followers} />
-                      <Stat label="Posts" value={totals.posts} />
-                      <Stat label="Comments" value={totals.comments} />
-                      <Stat label="Views" value={totals.views} />
+                    <div className="truncate text-[11px] text-muted-foreground">
+                      {member.totals.count}{" "}
+                      {member.totals.count === 1 ? "account" : "accounts"}
                     </div>
                   </div>
-                ))}
+                </div>
+                <div className="mt-3 grid grid-cols-4 gap-2 border-t border-border pt-3">
+                  <Stat label="Followers" value={member.totals.followers} />
+                  <Stat label="Posts" value={member.totals.posts} />
+                  <Stat label="Comments" value={member.totals.comments} />
+                  <Stat label="Views" value={member.totals.views} />
+                </div>
               </div>
-            </>
-          );
-        })()}
+            ))}
+          </div>
+        </>
       </section>
 
       <p className="mt-8 text-[11px] text-muted-foreground">

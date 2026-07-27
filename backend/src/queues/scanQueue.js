@@ -7,12 +7,17 @@ const connection = new IORedis(process.env.REDIS_URL || "redis://127.0.0.1:6379"
 
 const scanQueue = new Queue("instagram-profile-scan", { connection });
 
+function getProfileJobId(profileId) {
+  return `scan-profile-${profileId}`;
+}
+
 async function enqueueProfileScan({ userId, profileId, username }) {
-  const jobId = `scan-profile-${profileId}`;
+  const jobId = getProfileJobId(profileId);
 
   const existingJob = await scanQueue.getJob(jobId);
   if (existingJob) {
     const state = await existingJob.getState();
+
     if (["waiting", "active", "delayed"].includes(state)) {
       return { id: existingJob.id, status: state, alreadyRunning: true };
     }
@@ -32,20 +37,77 @@ async function enqueueProfileScan({ userId, profileId, username }) {
     }
   );
 
-  return { id: job.id, status: "queued", alreadyRunning: false };
+  await job.updateProgress({
+    stage: "waiting",
+    pct: 0,
+    username,
+    profileId,
+  });
+
+  return { id: job.id, status: "waiting", alreadyRunning: false };
 }
 
 async function getJobStatus(jobId) {
   const job = await scanQueue.getJob(jobId);
-  if (!job) return { status: "not_found" };
+  if (!job) {
+    return { status: "not_found" };
+  }
 
   const state = await job.getState();
+
   return {
     status: state,
-    progress: job.progress,
-    returnvalue: job.returnvalue,
-    failedReason: job.failedReason,
+    progress: job.progress || null,
+    returnvalue: job.returnvalue || null,
+    failedReason: job.failedReason || null,
+    jobId: job.id,
   };
 }
 
-module.exports = { scanQueue, enqueueProfileScan, getJobStatus, connection };
+async function getJobsStatusByProfiles(profiles = []) {
+  const items = await Promise.all(
+    profiles.map(async (profile) => {
+      const jobId = getProfileJobId(profile.id);
+      const job = await scanQueue.getJob(jobId);
+
+      if (!job) {
+        return {
+          profileId: profile.id,
+          username: profile.username,
+          member_name: profile.member_name,
+          jobId,
+          status: "idle",
+          progress: null,
+          returnvalue: null,
+          failedReason: null,
+          last_scraped_at: profile.last_scraped_at,
+        };
+      }
+
+      const state = await job.getState();
+
+      return {
+        profileId: profile.id,
+        username: profile.username,
+        member_name: profile.member_name,
+        jobId: job.id,
+        status: state,
+        progress: job.progress || null,
+        returnvalue: job.returnvalue || null,
+        failedReason: job.failedReason || null,
+        last_scraped_at: profile.last_scraped_at,
+      };
+    })
+  );
+
+  return items;
+}
+
+module.exports = {
+  scanQueue,
+  enqueueProfileScan,
+  getJobStatus,
+  getJobsStatusByProfiles,
+  getProfileJobId,
+  connection,
+};

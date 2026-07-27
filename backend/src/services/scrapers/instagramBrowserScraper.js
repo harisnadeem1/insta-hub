@@ -681,22 +681,7 @@ async function fetchSinglePostStats(context, debugDir, shortcode, type = "post")
     const comments_count = Math.max(htmlStats.comments_count, jsonComments);
     const views_count = Math.max(htmlStats.views_count, jsonViews);
 
-    fs.writeFileSync(
-      path.join(debugDir, `instagram-post-${shortcode}.json`),
-      JSON.stringify(
-        {
-          shortcode,
-          url,
-          htmlStats,
-          jsonComments,
-          jsonViews,
-          responses: responses.map((r) => ({ url: r.url, status: r.status })),
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
+   
 
     return { shortcode, comments_count, views_count, url };
   } finally {
@@ -989,38 +974,6 @@ if (result.comments_count > alreadyCounted) {
 
       await page.waitForTimeout(1200);
     }
-
-    fs.writeFileSync(path.join(debugDir, `instagram-${cleanUsername}.html`), html, "utf8");
-    fs.writeFileSync(
-      path.join(debugDir, `instagram-${cleanUsername}-responses.json`),
-      JSON.stringify(
-        {
-          profileResponses: collectedResponses.map((item) => ({
-            url: item.url,
-            status: item.status,
-            matchesUsername: responseMatchesUsername(item.json, cleanUsername),
-            hasCounts: responseHasCounts(item.json),
-          })),
-          mainGridShortcodes,
-          mainGridStats,
-          reelsShortcodes,
-          reelStats,
-          shortcodes,
-          fallbackCandidates,
-          postSuccessCount,
-          totalComments,
-          totalViews,
-        },
-        null,
-        2
-      ),
-      "utf8"
-    );
-
-    await page.screenshot({
-      path: path.join(debugDir, `instagram-${cleanUsername}.png`),
-      fullPage: true,
-    });
 
     return {
       username: cleanUsername,

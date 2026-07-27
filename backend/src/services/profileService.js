@@ -1,5 +1,4 @@
 const pool = require("../config/db");
-
 const instagramScrapeService = require("./instagramScrapeService");
 
 function createError(message, statusCode) {
@@ -449,5 +448,76 @@ exports.getProfileById = async ({ userId, profileId }) => {
   } catch (error) {
     if (error.statusCode === 404) return null;
     throw error;
+  }
+};
+
+exports.getActiveProfilesForSync = async ({ userId }) => {
+  const query = `
+    SELECT
+      ip.id,
+      ip.member_id,
+      m.name AS member_name,
+      ip.username,
+      ip.profile_url,
+      ip.profile_name,
+      ip.is_public,
+      ip.is_active,
+      ip.last_scraped_at
+    FROM instagram_profiles ip
+    INNER JOIN members m ON m.id = ip.member_id
+    WHERE m.user_id = $1
+      AND ip.is_active = true
+    ORDER BY ip.created_at DESC
+  `;
+
+  const result = await pool.query(query, [userId]);
+
+  return result.rows.map((row) => ({
+    id: Number(row.id),
+    member_id: Number(row.member_id),
+    member_name: row.member_name,
+    username: row.username,
+    profile_url: row.profile_url,
+    profile_name: row.profile_name,
+    is_public: row.is_public,
+    is_active: row.is_active,
+    last_scraped_at: row.last_scraped_at,
+  }));
+};
+
+exports.deleteProfile = async ({ userId, profileId }) => {
+  await getOwnedProfile(userId, profileId);
+
+  const deleteSnapshotsQuery = `
+    DELETE FROM profile_stats_snapshots
+    WHERE instagram_profile_id = $1
+  `;
+
+  const deleteProfileQuery = `
+    DELETE FROM instagram_profiles
+    WHERE id = $1
+    RETURNING id
+  `;
+
+  const client = await pool.connect();
+
+  try {
+    await client.query("BEGIN");
+
+    await client.query(deleteSnapshotsQuery, [profileId]);
+
+    const result = await client.query(deleteProfileQuery, [profileId]);
+
+    if (result.rows.length === 0) {
+      throw createError("Profile not found", 404);
+    }
+
+    await client.query("COMMIT");
+    return true;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
   }
 };
