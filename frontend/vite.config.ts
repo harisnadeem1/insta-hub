@@ -10,11 +10,20 @@ export default defineConfig({
       customViteReactPlugin: true,
       server: {
         entry: "./src/server.ts",
-        preset: "node-server",
       },
     }),
     react(),
     tailwindcss(),
     tsconfigPaths(),
   ],
+  server: {
+    host: "127.0.0.1",
+    port: 4173,
+    proxy: {
+      "/api": {
+        target: "http://127.0.0.1:3000",
+        changeOrigin: true,
+      },
+    },
+  },
 });
