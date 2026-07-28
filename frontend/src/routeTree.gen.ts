@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteImport } from './routes/_authenticated'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as AuthenticatedInstagramSessionRouteImport } from './routes/_authenticated/instagram-session'
 import { Route as AuthenticatedMembersRouteImport } from './routes/_authenticated/members'
 import { Route as AuthenticatedProfilesRouteImport } from './routes/_authenticated/profiles'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
@@ -31,6 +32,12 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthenticatedRoute,
 } as any)
+const AuthenticatedInstagramSessionRoute =
+  AuthenticatedInstagramSessionRouteImport.update({
+    id: '/instagram-session',
+    path: '/instagram-session',
+    getParentRoute: () => AuthenticatedRoute,
+  } as any)
 const AuthenticatedMembersRoute = AuthenticatedMembersRouteImport.update({
   id: '/members',
   path: '/members',
@@ -56,6 +63,7 @@ const AuthenticatedSyncProgressRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
   '/auth': typeof AuthRoute
+  '/instagram-session': typeof AuthenticatedInstagramSessionRoute
   '/members': typeof AuthenticatedMembersRoute
   '/profiles': typeof AuthenticatedProfilesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -63,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/auth': typeof AuthRoute
+  '/instagram-session': typeof AuthenticatedInstagramSessionRoute
   '/members': typeof AuthenticatedMembersRoute
   '/profiles': typeof AuthenticatedProfilesRoute
   '/settings': typeof AuthenticatedSettingsRoute
@@ -73,6 +82,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteWithChildren
   '/auth': typeof AuthRoute
+  '/_authenticated/instagram-session': typeof AuthenticatedInstagramSessionRoute
   '/_authenticated/members': typeof AuthenticatedMembersRoute
   '/_authenticated/profiles': typeof AuthenticatedProfilesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
@@ -82,13 +92,27 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/auth' | '/members' | '/profiles' | '/settings' | '/sync-progress'
+    | '/'
+    | '/auth'
+    | '/instagram-session'
+    | '/members'
+    | '/profiles'
+    | '/settings'
+    | '/sync-progress'
   fileRoutesByTo: FileRoutesByTo
-  to: '/auth' | '/members' | '/profiles' | '/settings' | '/sync-progress' | '/'
+  to:
+    | '/auth'
+    | '/instagram-session'
+    | '/members'
+    | '/profiles'
+    | '/settings'
+    | '/sync-progress'
+    | '/'
   id:
     | '__root__'
     | '/_authenticated'
     | '/auth'
+    | '/_authenticated/instagram-session'
     | '/_authenticated/members'
     | '/_authenticated/profiles'
     | '/_authenticated/settings'
@@ -124,6 +148,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRoute
     }
+    '/_authenticated/instagram-session': {
+      id: '/_authenticated/instagram-session'
+      path: '/instagram-session'
+      fullPath: '/instagram-session'
+      preLoaderRoute: typeof AuthenticatedInstagramSessionRouteImport
+      parentRoute: typeof AuthenticatedRoute
+    }
     '/_authenticated/members': {
       id: '/_authenticated/members'
       path: '/members'
@@ -156,6 +187,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthenticatedRouteChildren {
+  AuthenticatedInstagramSessionRoute: typeof AuthenticatedInstagramSessionRoute
   AuthenticatedMembersRoute: typeof AuthenticatedMembersRoute
   AuthenticatedProfilesRoute: typeof AuthenticatedProfilesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
@@ -164,6 +196,7 @@ interface AuthenticatedRouteChildren {
 }
 
 const AuthenticatedRouteChildren: AuthenticatedRouteChildren = {
+  AuthenticatedInstagramSessionRoute: AuthenticatedInstagramSessionRoute,
   AuthenticatedMembersRoute: AuthenticatedMembersRoute,
   AuthenticatedProfilesRoute: AuthenticatedProfilesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,

@@ -1,4 +1,4 @@
-$exclude = @("node_modules", ".git", "dist", "build", ".next", "coverage")
+$exclude = @("node_modules", ".git", "dist", "build", ".next", "coverage",".pw-instagram-session")
 
 function Show-Tree {
     param(

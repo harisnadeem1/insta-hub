@@ -4,17 +4,89 @@ insta-hub
 |   |   +-- config
 |   |   |   \-- db.js
 |   |   +-- controllers
-|   |   |   \-- authController.js
+|   |   |   +-- authController.js
+|   |   |   +-- dashboardController.js
+|   |   |   +-- memberController.js
+|   |   |   +-- profileController.js
+|   |   |   \-- settingsController.js
 |   |   +-- db
 |   |   +-- middleware
 |   |   |   +-- authMiddleware.js
 |   |   |   \-- errorMiddleware.js
+|   |   +-- queues
+|   |   |   \-- scanQueue.js
 |   |   +-- routes
-|   |   |   \-- authRoutes.js
+|   |   |   +-- authRoutes.js
+|   |   |   +-- dashboardRoutes.js
+|   |   |   +-- memberRoutes.js
+|   |   |   +-- profileRoutes.js
+|   |   |   \-- settingsRoutes.js
+|   |   +-- scripts
+|   |   |   \-- setupInstagramSession.js
 |   |   +-- services
+|   |   |   +-- scrapers
+|   |   |   |   +-- instagramBrowserScraper.js
+|   |   |   |   +-- instagramCrawlbaseScraper.js
+|   |   |   |   +-- instagramHttpScraper.js
+|   |   |   |   \-- instagramParser.js
+|   |   |   +-- sync
+|   |   |   |   \-- profileSyncService.js
+|   |   |   +-- dashboardService.js
+|   |   |   +-- instagramScrapeService.js
+|   |   |   +-- memberService.js
+|   |   |   +-- profileService.js
+|   |   |   \-- settingsService.js
+|   |   +-- workers
+|   |   |   \-- scanWorker.js
 |   |   +-- app.js
 |   |   \-- server.js
+|   +-- tmp
+|   |   +-- instagram-eman.zulf.html
+|   |   +-- instagram-eman.zulf.png
+|   |   +-- instagram-eman.zulf-responses.json
+|   |   +-- instagram-ghufran_ahmad_1.html
+|   |   +-- instagram-ghufran_ahmad_1.png
+|   |   +-- instagram-ghufran_ahmad_1-responses.json
+|   |   +-- instagram-nutri._.dia.html
+|   |   +-- instagram-nutri._.dia.png
+|   |   +-- instagram-nutri._.dia-responses.json
+|   |   +-- instagram-post-BtFUJDynQz3.json
+|   |   +-- instagram-post-BtFUMP1n04o.json
+|   |   +-- instagram-post-BtFUPahHdvK.json
+|   |   +-- instagram-post-BtGhjYyHlbe.json
+|   |   +-- instagram-post-BtGhyrUnW5Y.json
+|   |   +-- instagram-post-BtGiicqn8dB.json
+|   |   +-- instagram-post-BtIffMRHcU8.json
+|   |   +-- instagram-post-BtKtPRqHBtk.json
+|   |   +-- instagram-post-BtyL6Zwg0fH.json
+|   |   +-- instagram-post-BuJ55ymgxEu.json
+|   |   +-- instagram-post-BwB5x-UlSe9.json
+|   |   +-- instagram-post-C-AcbGaCtH_.json
+|   |   +-- instagram-post-C-C3PjWNanv.json
+|   |   +-- instagram-post-C-Cu99VCJkL.json
+|   |   +-- instagram-post-C-Cz-EXCjyH.json
+|   |   +-- instagram-post-C-GNb5PiSnC.json
+|   |   +-- instagram-post-Cl0oA8-K2Zz.json
+|   |   +-- instagram-post-CoP8yzoN1Ka.json
+|   |   +-- instagram-post-CpiUEdtIW0c.json
+|   |   +-- instagram-post-CrWR9n_t90j.json
+|   |   +-- instagram-post-CvqVj6bNJju.json
+|   |   +-- instagram-post-Cy2jTXYtSbP.json
+|   |   +-- instagram-post-DKhyRd5om9k.json
+|   |   +-- instagram-post-DLzPn7noY-7.json
+|   |   +-- instagram-post-DM0JbJGoaB3.json
+|   |   +-- instagram-post-DMQHAj3o2t5.json
+|   |   +-- instagram-post-DMsVf-CoL68.json
+|   |   +-- instagram-post-DPDvHnbiM39.json
+|   |   +-- instagram-post-DPS9nv-iKVh.json
+|   |   +-- instagram-post-DS2blNCCEY3.json
+|   |   +-- instagram-post-DSciaCeiGxE.json
+|   |   +-- instagram-post-DYaNJ5DDNPP.json
+|   |   +-- instagram-shopify_designer_.html
+|   |   +-- instagram-shopify_designer_.png
+|   |   \-- instagram-shopify_designer_-responses.json
 |   +-- .env
+|   +-- nodemon.json
 |   +-- package.json
 |   \-- package-lock.json
 +-- frontend
@@ -23,7 +95,7 @@ insta-hub
 |   +-- .tanstack
 |   |   \-- tmp
 |   +-- public
-|   |   \-- favicon.ico
+|   |   \-- favicon.png
 |   +-- src
 |   |   +-- components
 |   |   |   +-- ui
@@ -91,7 +163,7 @@ insta-hub
 |   |   |   |   +-- members.tsx
 |   |   |   |   +-- profiles.tsx
 |   |   |   |   +-- settings.tsx
-|   |   |   |   \-- snapshots.tsx
+|   |   |   |   \-- sync-progress.tsx
 |   |   |   +-- __root.tsx
 |   |   |   +-- _authenticated.tsx
 |   |   |   +-- auth.tsx
@@ -113,7 +185,9 @@ insta-hub
 |   +-- package.json
 |   +-- package-lock.json
 |   +-- README.md
+|   +-- start-node.mjs
 |   +-- tsconfig.json
 |   \-- vite.config.ts
++-- .gitignore
 +-- structure.txt
 \-- tree.ps1

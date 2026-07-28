@@ -7,6 +7,7 @@ const memberRoutes = require("./routes/memberRoutes");
 const profileRoutes = require("./routes/profileRoutes");
 const dashboardRoutes = require("./routes/dashboardRoutes");
 const settingsRoutes = require("./routes/settingsRoutes");
+const instagramSessionRoutes = require("./routes/instagramSessionRoutes");
 
 const errorMiddleware = require('./middleware/errorMiddleware');
 
@@ -17,6 +18,9 @@ const allowedOrigins = [
   'http://localhost:8080',
   'http://127.0.0.1:4173',
   'https://marbellavillarents.com',
+   "http://localhost:4173",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000",
 ];
 
 app.use(
@@ -25,7 +29,9 @@ app.use(
       if (!origin || allowedOrigins.includes(origin)) {
         return callback(null, true);
       }
-      return callback(new Error('Not allowed by CORS'));
+
+      console.log("Blocked CORS origin:", origin);
+      return callback(new Error("Not allowed by CORS"));
     },
     credentials: true,
   })
@@ -42,6 +48,8 @@ app.use("/api/members", memberRoutes);
 app.use("/api/profiles", profileRoutes);
 app.use("/api/dashboard", dashboardRoutes);
 app.use("/api/settings", settingsRoutes);
+app.use("/api/instagram/session", instagramSessionRoutes);
+
 
 app.use(errorMiddleware);
 
