@@ -11,7 +11,6 @@ const DISPLAY = process.env.INSTAGRAM_X_DISPLAY || ":99";
 const VNC_PORT = Number(process.env.INSTAGRAM_VNC_PORT || 5901);
 const NOVNC_PORT = Number(process.env.INSTAGRAM_NOVNC_PORT || 6080);
 const VIEWER_PATH = process.env.INSTAGRAM_VIEWER_PATH || "/instagram-browser/vnc.html";
-const PUBLIC_BASE_URL = process.env.PUBLIC_APP_URL || "https://marbellavillarents.com";
 
 let sessionSetupProcess = null;
 let xvfbProcess = null;
@@ -48,29 +47,13 @@ function readMeta() {
   }
 
   try {
-    const raw = fs.readFileSync(META_FILE, "utf8");
-    const parsed = JSON.parse(raw);
-
-    return {
-      inProgress: false,
-      startedAt: null,
-      completedAt: null,
-      message: null,
-      pid: null,
-      lastExitCode: null,
-      lastError: null,
-      browserRunning: false,
-      displayRunning: false,
-      viewerUrl: null,
-      log: [],
-      ...parsed,
-    };
+    return JSON.parse(fs.readFileSync(META_FILE, "utf8"));
   } catch {
     return {
       inProgress: false,
       startedAt: null,
       completedAt: null,
-      message: "Failed to read session meta file",
+      message: "Failed to parse session meta file",
       pid: null,
       lastExitCode: null,
       lastError: "Failed to parse session meta file",
@@ -89,71 +72,20 @@ function writeMeta(meta) {
 
 function appendLogLine(line) {
   const meta = readMeta();
-  const nextLog = [...(meta.log || []), `[${new Date().toISOString()}] ${line}`].slice(-200);
-
-  writeMeta({
-    ...meta,
-    log: nextLog,
-  });
-}
-
-function safeStat(filePath) {
-  try {
-    return fs.statSync(filePath);
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return null;
-    }
-    throw error;
-  }
-}
-
-function getDirectorySizeBytes(dirPath) {
-  if (!fs.existsSync(dirPath)) return 0;
-
-  let total = 0;
-  let entries = [];
-
-  try {
-    entries = fs.readdirSync(dirPath, { withFileTypes: true });
-  } catch (error) {
-    if (error.code === "ENOENT") {
-      return 0;
-    }
-    throw error;
-  }
-
-  for (const entry of entries) {
-    const fullPath = path.join(dirPath, entry.name);
-
-    try {
-      if (entry.isDirectory()) {
-        total += getDirectorySizeBytes(fullPath);
-      } else {
-        const stats = safeStat(fullPath);
-        if (stats) total += stats.size;
-      }
-    } catch (error) {
-      if (error.code === "ENOENT") continue;
-      throw error;
-    }
-  }
-
-  return total;
+  const nextLog = [...(meta.log || []), `[${new Date().toISOString()}] ${line}`].slice(-300);
+  writeMeta({ ...meta, log: nextLog });
 }
 
 function getViewerUrl() {
-  return `${PUBLIC_BASE_URL}${VIEWER_PATH}?autoconnect=true&resize=scale&reconnect=true&path=instagram-browser/websockify`;
+  return `${VIEWER_PATH}?autoconnect=true&resize=scale&reconnect=true&path=instagram-browser/websockify`;
 }
 
-function isProcessAlive(child) {
-  return !!child && !child.killed;
+function isRunning(proc) {
+  return !!proc && !proc.killed;
 }
 
-function getSessionFolderStats() {
-  const stats = safeStat(SESSION_DIR);
-
-  if (!stats) {
+function getSessionInfo() {
+  if (!fs.existsSync(SESSION_DIR)) {
     return {
       exists: false,
       path: SESSION_DIR,
@@ -162,31 +94,31 @@ function getSessionFolderStats() {
     };
   }
 
+  const stat = fs.statSync(SESSION_DIR);
+
   return {
     exists: true,
     path: SESSION_DIR,
-    lastModified: stats.mtime.toISOString(),
-    sizeBytes: getDirectorySizeBytes(SESSION_DIR),
+    lastModified: stat.mtime.toISOString(),
+    sizeBytes: 0,
   };
 }
 
-function spawnManagedProcess(name, command, args, options = {}) {
+function spawnManagedProcess(name, command, args, extraOptions = {}) {
   const child = spawn(command, args, {
     cwd: process.cwd(),
     stdio: ["ignore", "pipe", "pipe"],
     env: process.env,
     windowsHide: false,
-    ...options,
+    ...extraOptions,
   });
 
   child.stdout.on("data", (data) => {
     const text = data.toString().trim();
     if (!text) return;
     for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) {
-        console.log(`[instagram-session][${name}][stdout]`, line);
-        appendLogLine(`${name} stdout: ${line}`);
-      }
+      console.log(`[instagram-session][${name}][stdout]`, line);
+      appendLogLine(`${name} stdout: ${line}`);
     }
   });
 
@@ -194,21 +126,17 @@ function spawnManagedProcess(name, command, args, options = {}) {
     const text = data.toString().trim();
     if (!text) return;
     for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) {
-        console.error(`[instagram-session][${name}][stderr]`, line);
-        appendLogLine(`${name} stderr: ${line}`);
-      }
+      console.error(`[instagram-session][${name}][stderr]`, line);
+      appendLogLine(`${name} stderr: ${line}`);
     }
   });
 
-  child.on("error", (error) => {
-    console.error(`[instagram-session] ${name} failed`, error);
-    appendLogLine(`${name} error: ${error.message}`);
+  child.on("close", (code, signal) => {
+    appendLogLine(`${name} closed with code ${code} signal ${signal || "none"}`);
   });
 
-  child.on("close", (code, signal) => {
-    console.log(`[instagram-session] ${name} closed`, { code, signal });
-    appendLogLine(`${name} closed with code ${code} signal ${signal || "none"}`);
+  child.on("error", (error) => {
+    appendLogLine(`${name} error: ${error.message}`);
   });
 
   return child;
@@ -217,22 +145,21 @@ function spawnManagedProcess(name, command, args, options = {}) {
 async function ensureDisplayStack() {
   if (process.platform !== "linux") {
     return {
-      success: true,
-      viewerUrl: null,
       displayRunning: false,
+      viewerUrl: null,
     };
   }
 
-  if (!isProcessAlive(xvfbProcess)) {
-    xvfbProcess = spawnManagedProcess(
-      "xvfb",
-      "Xvfb",
-      [DISPLAY, "-screen", "0", "1280x1024x24", "-ac"]
-    );
-    await sleep(1200);
+  if (!isRunning(xvfbProcess)) {
+    xvfbProcess = spawnManagedProcess("xvfb", "Xvfb", [
+      DISPLAY,
+      "-screen", "0", "1280x1024x24",
+      "-ac",
+    ]);
+    await sleep(1500);
   }
 
-  if (!isProcessAlive(x11vncProcess)) {
+  if (!isRunning(x11vncProcess)) {
     x11vncProcess = spawnManagedProcess(
       "x11vnc",
       "x11vnc",
@@ -242,57 +169,40 @@ async function ensureDisplayStack() {
         "-forever",
         "-shared",
         "-nopw",
-        "-localhost"
-      ]
+        "-noxdamage",
+      ],
+      {
+        env: {
+          ...process.env,
+          DISPLAY,
+        },
+      }
     );
-    await sleep(1200);
+    await sleep(1500);
   }
 
-  if (!isProcessAlive(websockifyProcess)) {
-    websockifyProcess = spawnManagedProcess(
-      "websockify",
-      "websockify",
-      [
-        "--web=/usr/share/novnc/",
-        "--wrap-mode=ignore",
-        String(NOVNC_PORT),
-        `localhost:${VNC_PORT}`
-      ]
-    );
-    await sleep(1200);
+  if (!isRunning(websockifyProcess)) {
+    websockifyProcess = spawnManagedProcess("websockify", "websockify", [
+      "--web=/usr/share/novnc/",
+      String(NOVNC_PORT),
+      `localhost:${VNC_PORT}`,
+    ]);
+    await sleep(1500);
   }
 
   return {
-    success: true,
-    viewerUrl: getViewerUrl(),
     displayRunning: true,
+    viewerUrl: getViewerUrl(),
   };
 }
 
 function getStatus() {
   const meta = readMeta();
-  const folder = getSessionFolderStats();
-
   return {
     success: true,
-    session: {
-      exists: folder.exists,
-      path: folder.path,
-      lastModified: folder.lastModified,
-      sizeBytes: folder.sizeBytes,
-    },
+    session: getSessionInfo(),
     setup: {
-      inProgress: meta.inProgress,
-      startedAt: meta.startedAt,
-      completedAt: meta.completedAt,
-      message: meta.message,
-      pid: meta.pid,
-      lastExitCode: meta.lastExitCode,
-      lastError: meta.lastError,
-      browserRunning: meta.browserRunning,
-      displayRunning: meta.displayRunning,
-      viewerUrl: meta.viewerUrl,
-      log: meta.log || [],
+      ...meta,
     },
   };
 }
@@ -315,23 +225,20 @@ async function startSessionSetup() {
     };
   }
 
-  const displayResult = await ensureDisplayStack();
-  const viewerUrl = displayResult.viewerUrl;
+  const stack = await ensureDisplayStack();
 
   const nextMeta = {
     ...meta,
     inProgress: true,
     startedAt: new Date().toISOString(),
     completedAt: null,
-    message: process.platform === "linux"
-      ? "Instagram session setup started. Open the browser viewer to log in."
-      : "Instagram session setup started. A local Playwright browser should open for manual login.",
+    message: "Instagram session setup started. Open the browser viewer to log in.",
     pid: null,
     lastExitCode: null,
     lastError: null,
     browserRunning: false,
-    displayRunning: displayResult.displayRunning,
-    viewerUrl,
+    displayRunning: stack.displayRunning,
+    viewerUrl: stack.viewerUrl,
     log: [],
   };
 
@@ -350,62 +257,51 @@ async function startSessionSetup() {
 
   sessionSetupProcess = child;
 
-  const startedMeta = {
+  writeMeta({
     ...readMeta(),
     pid: child.pid,
     browserRunning: true,
-    displayRunning: process.platform === "linux",
-    viewerUrl,
-  };
-  writeMeta(startedMeta);
+    displayRunning: true,
+    viewerUrl: stack.viewerUrl,
+  });
 
   appendLogLine(`Started setup script with PID ${child.pid}`);
-  console.log("[instagram-session] spawned setup script", { pid: child.pid, script: SCRIPT_PATH });
 
   child.stdout.on("data", (data) => {
     const text = data.toString().trim();
     if (!text) return;
-
     for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) {
-        console.log("[instagram-session][stdout]", line);
-        appendLogLine(`stdout: ${line}`);
-      }
+      console.log("[instagram-session][stdout]", line);
+      appendLogLine(`stdout: ${line}`);
     }
   });
 
   child.stderr.on("data", (data) => {
     const text = data.toString().trim();
     if (!text) return;
-
     for (const line of text.split(/\r?\n/)) {
-      if (line.trim()) {
-        console.error("[instagram-session][stderr]", line);
-        appendLogLine(`stderr: ${line}`);
-      }
+      console.error("[instagram-session][stderr]", line);
+      appendLogLine(`stderr: ${line}`);
     }
   });
 
   child.on("error", (error) => {
-    console.error("[instagram-session] failed to start setup script", error);
-
-    const failedMeta = {
+    writeMeta({
       ...readMeta(),
       inProgress: false,
       pid: null,
       browserRunning: false,
       lastError: error.message,
       message: "Failed to start Instagram session setup.",
-    };
-
-    writeMeta(failedMeta);
+    });
     appendLogLine(`process error: ${error.message}`);
     sessionSetupProcess = null;
   });
 
   child.on("close", (code, signal) => {
     const sessionExists = fs.existsSync(SESSION_DIR);
-    const finalMeta = {
+
+    writeMeta({
       ...readMeta(),
       inProgress: false,
       pid: null,
@@ -421,28 +317,24 @@ async function startSessionSetup() {
           : signal
             ? `Instagram session setup was stopped with signal ${signal}.`
             : `Instagram session setup exited with code ${code}.`,
-    };
+    });
 
-    writeMeta(finalMeta);
     appendLogLine(`process closed with code ${code} signal ${signal || "none"}`);
-    console.log("[instagram-session] setup script closed", { code, signal, sessionExists });
     sessionSetupProcess = null;
   });
 
   return {
     success: true,
-    message: nextMeta.message,
+    message: "Instagram session setup started.",
     setup: {
-      ...startedMeta,
+      ...readMeta(),
       inProgress: true,
     },
   };
 }
 
 function completeSessionSetup() {
-  const sessionExists = fs.existsSync(SESSION_DIR);
-
-  if (!sessionExists) {
+  if (!fs.existsSync(SESSION_DIR)) {
     return {
       success: false,
       message: "Session folder not found. Complete the Instagram login flow first.",
@@ -450,7 +342,6 @@ function completeSessionSetup() {
   }
 
   const meta = readMeta();
-
   const nextMeta = {
     ...meta,
     inProgress: false,
@@ -468,39 +359,11 @@ function completeSessionSetup() {
   };
 }
 
-async function removeSessionDirWithRetry() {
-  const maxAttempts = 5;
-
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      if (!fs.existsSync(SESSION_DIR)) {
-        return { success: true };
-      }
-
-      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
-      return { success: true };
-    } catch (error) {
-      appendLogLine(`delete attempt ${attempt} failed: ${error.message}`);
-
-      if (attempt === maxAttempts) {
-        return {
-          success: false,
-          error,
-        };
-      }
-
-      await sleep(700);
-    }
-  }
-
-  return { success: true };
-}
-
 async function resetSession() {
   if (sessionSetupProcess && !sessionSetupProcess.killed) {
     try {
-      appendLogLine(`stopping running setup process PID ${sessionSetupProcess.pid}`);
       sessionSetupProcess.kill("SIGTERM");
+      appendLogLine(`stopping running setup process PID ${sessionSetupProcess.pid}`);
     } catch (error) {
       appendLogLine(`failed to stop running process: ${error.message}`);
     }
@@ -508,30 +371,27 @@ async function resetSession() {
 
   await sleep(1500);
 
-  const removeResult = await removeSessionDirWithRetry();
-
-  if (!removeResult.success) {
-    const message =
-      "Could not delete .pw-instagram-session because it is still being used by another process. Close the Playwright/Chromium window and try again.";
-
-    const nextMeta = {
+  try {
+    if (fs.existsSync(SESSION_DIR)) {
+      fs.rmSync(SESSION_DIR, { recursive: true, force: true });
+    }
+  } catch (error) {
+    const meta = {
       ...readMeta(),
       inProgress: false,
       browserRunning: false,
-      message,
-      lastError: removeResult.error.message,
+      message: "Could not delete .pw-instagram-session.",
+      lastError: error.message,
     };
 
-    writeMeta(nextMeta);
+    writeMeta(meta);
 
     return {
       success: false,
-      message,
-      setup: nextMeta,
+      message: meta.message,
+      setup: meta,
     };
   }
-
-  sessionSetupProcess = null;
 
   const nextMeta = {
     inProgress: false,
