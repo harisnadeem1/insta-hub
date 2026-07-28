@@ -79,19 +79,49 @@ function appendLogLine(line) {
   });
 }
 
+function safeStat(filePath) {
+  try {
+    return fs.statSync(filePath);
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return null;
+    }
+    throw error;
+  }
+}
+
 function getDirectorySizeBytes(dirPath) {
   if (!fs.existsSync(dirPath)) return 0;
 
   let total = 0;
-  const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  let entries = [];
+
+  try {
+    entries = fs.readdirSync(dirPath, { withFileTypes: true });
+  } catch (error) {
+    if (error.code === "ENOENT") {
+      return 0;
+    }
+    throw error;
+  }
 
   for (const entry of entries) {
     const fullPath = path.join(dirPath, entry.name);
 
-    if (entry.isDirectory()) {
-      total += getDirectorySizeBytes(fullPath);
-    } else {
-      total += fs.statSync(fullPath).size;
+    try {
+      if (entry.isDirectory()) {
+        total += getDirectorySizeBytes(fullPath);
+      } else {
+        const stats = safeStat(fullPath);
+        if (stats) {
+          total += stats.size;
+        }
+      }
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        continue;
+      }
+      throw error;
     }
   }
 
@@ -99,9 +129,9 @@ function getDirectorySizeBytes(dirPath) {
 }
 
 function getSessionFolderStats() {
-  const exists = fs.existsSync(SESSION_DIR);
+  const stats = safeStat(SESSION_DIR);
 
-  if (!exists) {
+  if (!stats) {
     return {
       exists: false,
       path: SESSION_DIR,
@@ -110,8 +140,6 @@ function getSessionFolderStats() {
     };
   }
 
-  const stats = fs.statSync(SESSION_DIR);
-
   return {
     exists: true,
     path: SESSION_DIR,
@@ -119,7 +147,6 @@ function getSessionFolderStats() {
     sizeBytes: getDirectorySizeBytes(SESSION_DIR),
   };
 }
-
 function getStatus() {
   const meta = readMeta();
   const folder = getSessionFolderStats();
