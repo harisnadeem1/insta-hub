@@ -204,12 +204,21 @@ function startSessionSetup() {
 
   writeMeta(nextMeta);
 
-  const child = spawn(process.execPath, [SCRIPT_PATH], {
-    cwd: process.cwd(),
-    stdio: ["ignore", "pipe", "pipe"],
-    env: process.env,
-    windowsHide: false,
-  });
+  const isLinux = process.platform === "linux";
+
+const child = isLinux
+  ? spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x1024x24", process.execPath, SCRIPT_PATH], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+      windowsHide: false,
+    })
+  : spawn(process.execPath, [SCRIPT_PATH], {
+      cwd: process.cwd(),
+      stdio: ["ignore", "pipe", "pipe"],
+      env: process.env,
+      windowsHide: false,
+    });
 
   sessionSetupProcess = child;
 
