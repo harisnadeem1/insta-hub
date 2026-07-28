@@ -18,7 +18,7 @@ async function setupInstagramSession() {
     ],
   });
 
-  const page = await context.newPage();
+  const page = context.pages()[0] || (await context.newPage());
 
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "webdriver", {
@@ -41,21 +41,11 @@ async function setupInstagramSession() {
     timeout: 45000,
   });
 
-  console.log("");
   console.log("Instagram browser opened.");
-  console.log("Log in manually in the opened browser window.");
-  console.log("After login fully completes and homepage/profile loads, press ENTER here to save the session.");
-  console.log("");
+  console.log("Log in manually in the browser viewer.");
+  console.log("When login is complete, use the admin page button: Mark Session Complete.");
 
-  await new Promise((resolve) => {
-    process.stdin.resume();
-    process.stdin.once("data", () => resolve());
-  });
-
-  await context.close();
-
-  console.log("Session saved in .pw-instagram-session");
-  process.exit(0);
+  await new Promise(() => {});
 }
 
 setupInstagramSession().catch((error) => {

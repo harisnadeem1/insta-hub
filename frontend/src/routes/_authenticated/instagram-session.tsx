@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
@@ -9,13 +9,20 @@ type SessionStatusResponse = {
     exists: boolean;
     path: string;
     lastModified: string | null;
-    sizeBytes: number;
+    sizeBytes: number | null;
   };
   setup: {
     inProgress: boolean;
     startedAt: string | null;
     completedAt: string | null;
     message: string | null;
+    pid: number | null;
+    lastExitCode: number | null;
+    lastError: string | null;
+    browserRunning: boolean;
+    displayRunning: boolean;
+    viewerUrl: string | null;
+    log: string[];
   };
 };
 
@@ -23,13 +30,15 @@ export const Route = createFileRoute("/_authenticated/instagram-session")({
   component: InstagramSessionPage,
 });
 
+function getToken() {
+  return localStorage.getItem("token");
+}
+
 function InstagramSessionPage() {
   const [data, setData] = useState<SessionStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const token = useMemo(() => localStorage.getItem("token"), []);
 
   async function fetchStatus() {
     try {
@@ -38,7 +47,7 @@ function InstagramSessionPage() {
 
       const res = await fetch("/api/instagram/session/status", {
         headers: {
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 
@@ -65,7 +74,7 @@ function InstagramSessionPage() {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          Authorization: `Bearer ${getToken()}`,
         },
       });
 
@@ -75,7 +84,12 @@ function InstagramSessionPage() {
         throw new Error(json.message || `Failed to ${endpoint} session`);
       }
 
+      setData((prev) => (prev ? { ...prev, ...json } : json));
       await fetchStatus();
+
+      if (endpoint === "start" && json?.setup?.viewerUrl) {
+        window.open(json.setup.viewerUrl, "_blank", "noopener,noreferrer");
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -85,6 +99,8 @@ function InstagramSessionPage() {
 
   useEffect(() => {
     fetchStatus();
+    const interval = window.setInterval(fetchStatus, 5000);
+    return () => window.clearInterval(interval);
   }, []);
 
   return (
@@ -111,35 +127,44 @@ function InstagramSessionPage() {
             <p>Loading status...</p>
           ) : (
             <>
-              <p>
-                <span className="font-medium">Session exists:</span>{" "}
-                {data?.session.exists ? "Yes" : "No"}
-              </p>
-              <p>
-                <span className="font-medium">Session path:</span>{" "}
-                {data?.session.path || "-"}
-              </p>
-              <p>
-                <span className="font-medium">Last modified:</span>{" "}
-                {data?.session.lastModified || "-"}
-              </p>
-              <p>
-                <span className="font-medium">In progress:</span>{" "}
-                {data?.setup.inProgress ? "Yes" : "No"}
-              </p>
-              <p>
-                <span className="font-medium">Started at:</span>{" "}
-                {data?.setup.startedAt || "-"}
-              </p>
-              <p>
-                <span className="font-medium">Completed at:</span>{" "}
-                {data?.setup.completedAt || "-"}
-              </p>
-              <p>
-                <span className="font-medium">Message:</span>{" "}
-                {data?.setup.message || "-"}
-              </p>
+              <p><span className="font-medium">Session exists:</span> {data?.session.exists ? "Yes" : "No"}</p>
+              <p><span className="font-medium">Session path:</span> {data?.session.path || "-"}</p>
+              <p><span className="font-medium">Last modified:</span> {data?.session.lastModified || "-"}</p>
+              <p><span className="font-medium">Session size:</span> {data?.session.sizeBytes ?? "-"}</p>
+              <p><span className="font-medium">In progress:</span> {data?.setup.inProgress ? "Yes" : "No"}</p>
+              <p><span className="font-medium">Browser running:</span> {data?.setup.browserRunning ? "Yes" : "No"}</p>
+              <p><span className="font-medium">Display running:</span> {data?.setup.displayRunning ? "Yes" : "No"}</p>
+              <p><span className="font-medium">Started at:</span> {data?.setup.startedAt || "-"}</p>
+              <p><span className="font-medium">Completed at:</span> {data?.setup.completedAt || "-"}</p>
+              <p><span className="font-medium">PID:</span> {data?.setup.pid || "-"}</p>
+              <p><span className="font-medium">Last exit code:</span> {data?.setup.lastExitCode ?? "-"}</p>
+              <p><span className="font-medium">Last error:</span> {data?.setup.lastError || "-"}</p>
+              <p><span className="font-medium">Message:</span> {data?.setup.message || "-"}</p>
             </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Browser Viewer</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3 text-sm">
+          <p className="text-muted-foreground">
+            On VPS, the Instagram login opens in a remote browser viewer backed by the server session.
+          </p>
+
+          {data?.setup.viewerUrl ? (
+            <div className="flex flex-wrap gap-3">
+              <Button
+                variant="outline"
+                onClick={() => window.open(data.setup.viewerUrl!, "_blank", "noopener,noreferrer")}
+              >
+                Open Browser Viewer
+              </Button>
+            </div>
+          ) : (
+            <p className="text-muted-foreground">Viewer URL not available yet.</p>
           )}
         </CardContent>
       </Card>
@@ -177,14 +202,18 @@ function InstagramSessionPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Next Step</CardTitle>
+          <CardTitle>Live Log</CardTitle>
         </CardHeader>
-        <CardContent className="space-y-2 text-sm text-muted-foreground">
-          <p>Phase 1 only manages session state and folder status.</p>
-          <p>
-            Next we can wire this page to actually trigger a local Instagram login flow and later
-            connect it to the VPS session workflow.
-          </p>
+        <CardContent className="space-y-2 text-xs">
+          {data?.setup.log?.length ? (
+            <div className="max-h-80 overflow-auto rounded-md border bg-muted p-3 font-mono">
+              {data.setup.log.map((line, index) => (
+                <div key={`${index}-${line}`}>{line}</div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">No logs yet.</p>
+          )}
         </CardContent>
       </Card>
     </div>

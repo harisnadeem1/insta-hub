@@ -13,7 +13,12 @@ async function getInstagramSessionStatus(req, res, next) {
 async function startInstagramSession(req, res, next) {
   try {
     console.log("[instagram-session] POST /start");
-    const result = instagramSessionService.startSessionSetup();
+    const result = await instagramSessionService.startSessionSetup();
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     next(error);
@@ -38,7 +43,12 @@ async function completeInstagramSession(req, res, next) {
 async function resetInstagramSession(req, res, next) {
   try {
     console.log("[instagram-session] POST /reset");
-    const result = instagramSessionService.resetSession();
+    const result = await instagramSessionService.resetSession();
+
+    if (!result.success) {
+      return res.status(400).json(result);
+    }
+
     return res.status(200).json(result);
   } catch (error) {
     next(error);
