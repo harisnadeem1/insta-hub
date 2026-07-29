@@ -206,6 +206,27 @@ function getStatus() {
     },
   };
 }
+async function cleanupViewerStack() {
+  for (const port of [5901, 6080]) {
+    try {
+      spawn("fuser", ["-k", `${port}/tcp`], { stdio: "ignore" });
+    } catch {}
+  }
+
+  for (const proc of [websockifyProcess, x11vncProcess, xvfbProcess]) {
+    if (proc && !proc.killed) {
+      try {
+        proc.kill("SIGTERM");
+      } catch {}
+    }
+  }
+
+  websockifyProcess = null;
+  x11vncProcess = null;
+  xvfbProcess = null;
+
+  await sleep(1500);
+}
 
 async function startSessionSetup() {
   const meta = readMeta();
@@ -224,6 +245,7 @@ async function startSessionSetup() {
       message: `Session setup script not found at ${SCRIPT_PATH}`,
     };
   }
+  await cleanupViewerStack();
 
   const stack = await ensureDisplayStack();
 
