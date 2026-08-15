@@ -420,7 +420,7 @@ if (METHOD_ENABLED.browser_scraper) {
     const browserPage = await withTimeout(
   fetchProfilePageWithBrowser(requestedUsername, {
     postLimit: Infinity,
-    postConcurrency: 3,
+    postConcurrency: 1,
   }),
   600000,
   "Browser scraper fetchProfilePageWithBrowser"
